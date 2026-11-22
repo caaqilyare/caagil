@@ -36,8 +36,10 @@ import {
   isIpAddress,
   normalizeDomain,
   panelEdgeSettings,
+  refreshPanelEdge,
   writePanelEdge,
 } from "./edge";
+import { dnsPointsHere, expectedPublicIp, probeDomain } from "./ssl";
 
 export type AppRow = {
   id: string;
@@ -975,6 +977,8 @@ export async function addDomain(host: string, appId: string, actor = "system") {
   ]);
   await applyApp(app);
   await logActivity("domain.add", `${clean} → ${app.name}`, actor);
+  // SSL is requested by Traefik right away; watch until it actually lands.
+  watchCertificate(clean, actor);
   return listDomains();
 }
 
@@ -996,6 +1000,169 @@ export async function removeDomain(id: string, actor = "system") {
   }
   await logActivity("domain.remove", row.host, actor);
   return listDomains();
+}
+
+/* ──────────────────────────── SSL (cPanel-style) ─────────────────────────── */
+
+export type DomainSsl = {
+  host: string;
+  scope: "panel" | "app";
+  appName?: string | null;
+  ok: boolean;
+  issuer?: string;
+  expiresAt?: number;
+  selfSigned?: boolean;
+  reason?: string;
+};
+
+/** Live SSL state for every known hostname (panel domain + attached domains). */
+export async function sslStatus(): Promise<{ checkedAt: number; domains: DomainSsl[] }> {
+  const [rows, edge] = await Promise.all([listDomains(), panelEdgeSettings()]);
+  const entries: { host: string; scope: "panel" | "app"; appName?: string | null }[] = [];
+  if (edge.domain) entries.push({ host: edge.domain, scope: "panel" });
+  for (const row of rows) {
+    if (row.host === edge.domain) continue;
+    entries.push({ host: row.host, scope: "app", appName: row.app_name });
+  }
+
+  const probes = await Promise.all(
+    entries.map(async (entry) => ({ entry, probe: await probeDomain(entry.host) })),
+  );
+
+  return {
+    checkedAt: Date.now(),
+    domains: probes.map(({ entry, probe }) => ({
+      host: entry.host,
+      scope: entry.scope,
+      appName: entry.appName ?? null,
+      ok: probe.ok,
+      issuer: probe.issuer,
+      expiresAt: probe.expiresAt,
+      selfSigned: probe.selfSigned,
+      reason: probe.reason,
+    })),
+  };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Poll the live probe until a real certificate lands (or time out). */
+async function waitForCertificate(
+  domain: string,
+  timeoutMs = 150_000,
+): Promise<{ ok: boolean; issuer?: string; expiresAt?: number; reason?: string }> {
+  const deadline = Date.now() + timeoutMs;
+  let last: Awaited<ReturnType<typeof probeDomain>> | null = null;
+  while (Date.now() < deadline) {
+    last = await probeDomain(domain);
+    if (last.ok) return last;
+    await sleep(5000);
+  }
+  return { ok: false, reason: last?.reason || "no certificate appeared in time" };
+}
+
+/**
+ * Force a Let's Encrypt certificate for a domain: nudge the matching Traefik
+ * router (file config for the panel, container recreation for app domains),
+ * then wait until the certificate is actually served.
+ */
+export async function startSslIssue(domain: string, actor = "system"): Promise<{ job: string }> {
+  const clean = normalizeDomain(domain);
+  const edge = await panelEdgeSettings();
+  const isPanel = edge.domain === clean;
+  const attached = await one<{ id: string; name: string }>(
+    "SELECT a.id, a.name FROM domains d JOIN apps a ON a.id = d.app_id WHERE d.host = ? LIMIT 1",
+    [clean],
+  );
+  if (!isPanel && !attached) {
+    throw new Error(`${clean} is not attached to the panel or to any app.`);
+  }
+
+  const jobId = createJob("ssl.add", `SSL certificate · ${clean}`, [
+    { key: "dns", label: "Checking DNS" },
+    { key: "route", label: "Refreshing the HTTPS route" },
+    { key: "acme", label: "Requesting the Let's Encrypt certificate" },
+    { key: "verify", label: "Verifying HTTPS" },
+  ]);
+
+  void (async () => {
+    try {
+      jobStep(jobId, "dns", "active");
+      const expected = await expectedPublicIp();
+      const dns = await dnsPointsHere(clean, expected);
+      if (!dns.resolved) {
+        jobFail(
+          jobId,
+          `${clean} does not resolve in DNS yet. Add an A record → ${expected ?? "this server's IP"} first.`,
+        );
+        return;
+      }
+      if (dns.ok) {
+        jobStep(jobId, "dns", "done", `A → ${dns.expected}`);
+      } else {
+        // A CDN/proxy (e.g. Cloudflare) may sit in front — try anyway, the
+        // certificate request only needs HTTP-01 traffic to reach Traefik.
+        jobStep(jobId, "dns", "done", `resolves to ${dns.found[0]} (proxy?) — trying anyway`);
+      }
+
+      jobStep(jobId, "route", "active");
+      if (isPanel) {
+        await refreshPanelEdge();
+      } else {
+        await applyApp((await getApp(attached!.id))!);
+      }
+      jobStep(jobId, "route", "done");
+
+      jobStep(jobId, "acme", "active", "usually 10-30 seconds…");
+      const cert = await waitForCertificate(clean);
+      if (!cert.ok) {
+        jobFail(jobId, `Let's Encrypt did not issue a certificate: ${cert.reason}`);
+        await logActivity("ssl.add", `${clean}: ${cert.reason}`, actor, false);
+        return;
+      }
+      jobStep(jobId, "acme", "done", cert.issuer || "Let's Encrypt");
+
+      jobStep(jobId, "verify", "active");
+      jobStep(
+        jobId,
+        "verify",
+        "done",
+        `valid until ${new Date(cert.expiresAt ?? Date.now() + 90 * 86400_000).toISOString().slice(0, 10)}`,
+      );
+      await logActivity("ssl.add", `${clean}: certificate live (${cert.issuer ?? "Let's Encrypt"})`, actor);
+      jobFinish(jobId, { domain: clean, issuer: cert.issuer, expiresAt: cert.expiresAt });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await logActivity("ssl.add", `${clean}: ${msg}`, actor, false).catch(() => {});
+      jobFail(jobId, msg);
+    }
+  })();
+
+  return { job: jobId };
+}
+
+/**
+ * After a domain is attached, watch in the background until Let's Encrypt
+ * serves a real certificate and log the outcome.
+ */
+function watchCertificate(host: string, actor: string, timeoutMs = 180_000): void {
+  void (async () => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await sleep(10_000);
+      const probe = await probeDomain(host).catch(() => null);
+      if (probe?.ok) {
+        await logActivity("ssl.add", `${host}: certificate live (${probe.issuer ?? "Let's Encrypt"})`, actor);
+        return;
+      }
+    }
+    await logActivity(
+      "ssl.add",
+      `${host}: no certificate after 3 minutes — check the DNS A record, then press "Add SSL"`,
+      actor,
+      false,
+    );
+  })();
 }
 
 /* ──────────────────────── panel access / edge ──────────────────── */

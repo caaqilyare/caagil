@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Globe, KeyRound, Lock, Save, Server, Sparkles } from "lucide-react";
+import { Check, Globe, KeyRound, Lock, Save, Server, ShieldCheck, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/shell";
 import { Badge, Button, Card, Code, Field, Input, Select } from "@/components/ui";
+import { SslBadge, SslFixModal, useSslStatus } from "@/components/ssl";
 import { usePanel } from "@/lib/client";
 
 export default function SettingsPage() {
   const { state, act } = usePanel();
+  const { map: sslMap, refresh: sslRefresh } = useSslStatus(Boolean(state));
+  const [sslFor, setSslFor] = useState<string | null>(null);
   const [panelName, setPanelName] = useState("");
   const [panelDomain, setPanelDomain] = useState("");
   const [publicIp, setPublicIp] = useState("");
@@ -80,11 +83,33 @@ export default function SettingsPage() {
             label="Panel domain"
             hint="Served over HTTPS with an automatic certificate. Point DNS at this server before changing it."
           >
-            <Input
-              value={panelDomain}
-              onChange={(e) => setPanelDomain(e.target.value)}
-              placeholder="panel.example.com"
-            />
+            <div className="flex gap-2">
+              <Input
+                value={panelDomain}
+                onChange={(e) => setPanelDomain(e.target.value)}
+                placeholder="panel.example.com"
+              />
+              {panelDomain && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={sslMap[panelDomain]?.ok ? "ghost" : "subtle"}
+                  onClick={() => (sslMap[panelDomain]?.ok ? void sslRefresh() : setSslFor(panelDomain))}
+                  title={
+                    sslMap[panelDomain]?.ok
+                      ? "Certificate valid"
+                      : (sslMap[panelDomain]?.reason ?? "Request an SSL certificate")
+                  }
+                >
+                  <ShieldCheck size={13} /> Add SSL
+                </Button>
+              )}
+            </div>
+            {panelDomain && (
+              <div className="mt-2">
+                <SslBadge status={sslMap[panelDomain]} />
+              </div>
+            )}
           </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -214,6 +239,16 @@ export default function SettingsPage() {
       </form>
 
       <ChangePassword />
+
+      {sslFor && (
+        <SslFixModal
+          domain={sslFor}
+          onClose={() => {
+            setSslFor(null);
+            void sslRefresh();
+          }}
+        />
+      )}
     </>
   );
 }

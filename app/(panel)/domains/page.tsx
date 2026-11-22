@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Globe2, Lock, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Globe2, Lock, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shell";
 import { Badge, Button, Card, Code, Empty, Field, Input, Modal, Select } from "@/components/ui";
+import { SslBadge, SslFixModal, useSslStatus } from "@/components/ssl";
 import { usePanel } from "@/lib/client";
 
 export default function DomainsPage() {
   const { state, loading, act } = usePanel();
+  const { map, refresh } = useSslStatus(Boolean(state));
   const [open, setOpen] = useState(false);
+  const [fixing, setFixing] = useState<string | null>(null);
   const [host, setHost] = useState("");
   const [appId, setAppId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,9 +38,14 @@ export default function DomainsPage() {
         title="Domains & SSL"
         subtitle="Point an A record at this server and Traefik issues the certificate automatically."
         action={
-          <Button size="sm" onClick={() => setOpen(true)}>
-            <Plus size={14} /> Add domain
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => void refresh()}>
+              <RefreshCw size={13} /> Check SSL
+            </Button>
+            <Button size="sm" onClick={() => setOpen(true)}>
+              <Plus size={14} /> Add domain
+            </Button>
+          </div>
         }
       />
 
@@ -81,9 +89,12 @@ export default function DomainsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone="ok">
-                  <ShieldCheck size={11} /> {d.cert}
-                </Badge>
+                <SslBadge status={map[d.host]} />
+                {map[d.host] && !map[d.host].ok && (
+                  <Button size="sm" variant="subtle" onClick={() => setFixing(d.host)}>
+                    <ShieldCheck size={13} /> Add SSL
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="danger"
@@ -95,6 +106,16 @@ export default function DomainsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {fixing && (
+        <SslFixModal
+          domain={fixing}
+          onClose={() => {
+            setFixing(null);
+            void refresh();
+          }}
+        />
       )}
 
       {state?.publicIp && (

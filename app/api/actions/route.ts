@@ -83,6 +83,10 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
         },
         actor,
       );
+    case "ssl.status":
+      return ops.sslStatus();
+    case "ssl.add":
+      return ops.startSslIssue(s("domain"), actor);
     case "app.route":
       return ops.setAppRoute(
         s("name"),

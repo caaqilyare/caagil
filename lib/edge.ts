@@ -129,6 +129,19 @@ export async function writePanelEdge(edge: PanelEdge): Promise<void> {
   await fs.rename(tmp, EDGE_FILE);
 }
 
+/**
+ * Rewrite the panel edge config unchanged (with a refresh marker) so the file
+ * watcher reloads it and Traefik retries pending certificate requests.
+ */
+export async function refreshPanelEdge(): Promise<void> {
+  const edge = await panelEdgeSettings();
+  const body = `${renderPanelEdge(edge)}\n# refreshed ${Date.now()}\n`;
+  await fs.mkdir(EDGE_DIR, { recursive: true });
+  const tmp = path.join(EDGE_DIR, ".panel.yml.tmp");
+  await fs.writeFile(tmp, body, { mode: 0o644 });
+  await fs.rename(tmp, EDGE_FILE);
+}
+
 export async function panelEdgeSettings(): Promise<PanelEdge> {
   const [domain, ip, allowIp] = await Promise.all([
     getSetting("panel_domain"),
