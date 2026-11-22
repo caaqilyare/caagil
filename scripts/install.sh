@@ -8,10 +8,13 @@ cd "$DIR"
 
 PANEL_DOMAIN="${PANEL_DOMAIN:-${1:-}}"
 PANEL_NAME="${PANEL_NAME:-Caagil}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${PANEL_DOMAIN:-localhost}}"
-ACME_EMAIL="${ACME_EMAIL:-${2:-$ADMIN_EMAIL}}"
+ACME_EMAIL="${ACME_EMAIL:-${2:-admin@${PANEL_DOMAIN:-localhost}}}"
 PANEL_DOMAIN="$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)}"
+# The first visit creates the owner account. For unattended installs set
+# CAAGIL_AUTO_ADMIN=true together with ADMIN_EMAIL and ADMIN_PASSWORD.
+ADMIN_EMAIL="${ADMIN_EMAIL:-}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
+AUTO_ADMIN="${CAAGIL_AUTO_ADMIN:-false}"
 DATA_DIR="${CAAGIL_DATA_DIR:-/opt/caagil/data}"
 EDGE_DIR="${CAAGIL_EDGE_DIR:-/opt/caagil/edge}"
 ALLOW_IP="${CAAGIL_ALLOW_IP:-true}"
@@ -84,14 +87,13 @@ fi
 
 # ── env ──────────────────────────────────────────────────────────
 mkdir -p "$DATA_DIR/sites" "$EDGE_DIR"
-FRESH_ENV=false
 if [ ! -f .env ]; then
-  FRESH_ENV=true
   log "writing .env"
   cat > .env <<EOF
 AUTH_SECRET=$(openssl rand -hex 32)
 ADMIN_EMAIL=${ADMIN_EMAIL}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
+CAAGIL_AUTO_ADMIN=${AUTO_ADMIN}
 PANEL_DB_ROOT_PASSWORD=$(openssl rand -hex 18)
 PANEL_DB_PASSWORD=$(openssl rand -hex 18)
 PANEL_DOMAIN=${PANEL_DOMAIN}
@@ -113,12 +115,9 @@ if [ -n "$PANEL_DOMAIN" ] && [ -z "$ACME_EMAIL" ]; then
 fi
 
 # ── edge routing (Traefik file provider) ─────────────────────────
-# On re-runs, report the domain that actually exists in .env. The password
-# there is only the initial one — it goes stale if changed in the panel.
+# On re-runs, report the domain that actually exists in .env.
 if [ -f .env ]; then
-  saved_email="$(grep -m1 '^ADMIN_EMAIL=' .env | cut -d= -f2- || true)"
   saved_domain="$(grep -m1 '^PANEL_DOMAIN=' .env | cut -d= -f2- || true)"
-  if [ -n "$saved_email" ]; then ADMIN_EMAIL="$saved_email"; fi
   if [ -n "$saved_domain" ]; then PANEL_DOMAIN="$saved_domain"; fi
 fi
 
@@ -200,19 +199,17 @@ if [ "$allow_ip_effective" = "true" ]; then
   panel_lines+="    IP      http://${ip}"$'\n'
 fi
 
-if [ "$FRESH_ENV" = "true" ]; then
-  pass_line="    Pass    ${ADMIN_PASSWORD}"
+if [ "$AUTO_ADMIN" = "true" ] && [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+  account_lines="    Login   ${ADMIN_EMAIL}"$'\n'"    Pass    ${ADMIN_PASSWORD}"$'\n'
 else
-  pass_line="    Pass    unchanged (use the password you set in the panel)"
+  account_lines="    First visit creates your owner username and password."$'\n'
 fi
 
 cat <<EOF
 
   Caagil is up.
 
-${panel_lines}    Login   ${ADMIN_EMAIL}
-${pass_line}
-    Data    ${DATA_DIR}
+${panel_lines}${account_lines}    Data    ${DATA_DIR}
     Edge    ${EDGE_DIR}/panel.yml
 
   Point an A record for ${PANEL_DOMAIN:-your domain} at ${ip} and Traefik issues

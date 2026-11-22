@@ -6,7 +6,9 @@ import {
   Copy,
   ExternalLink,
   FileCode2,
+  FolderOpen,
   GitBranch,
+  Globe,
   Link2,
   Play,
   Plus,
@@ -16,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shell";
+import { FileManager } from "@/components/file-manager";
 import {
   Badge,
   Button,
@@ -31,6 +34,7 @@ import {
 } from "@/components/ui";
 import { usePanel } from "@/lib/client";
 import type { AppRow } from "@/lib/ops";
+import type { DomainRow } from "@/lib/client";
 import type { RuntimePreset } from "@/lib/presets";
 
 function parseEnv(text: string): Record<string, string> {
@@ -50,6 +54,8 @@ export default function AppsPage() {
   const [open, setOpen] = useState(false);
   const [logsFor, setLogsFor] = useState<AppRow | null>(null);
   const [routeFor, setRouteFor] = useState<AppRow | null>(null);
+  const [filesFor, setFilesFor] = useState<AppRow | null>(null);
+  const [domainsFor, setDomainsFor] = useState<AppRow | null>(null);
   const [logs, setLogs] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +82,13 @@ export default function AppsPage() {
       setLogs(err instanceof Error ? err.message : String(err));
     }
   }
+
+  const knownHosts = Array.from(
+    new Set([
+      ...(state?.panel.domain ? [state.panel.domain] : []),
+      ...(state?.domains.map((domain) => domain.host) ?? []),
+    ]),
+  );
 
   return (
     <>
@@ -165,6 +178,12 @@ export default function AppsPage() {
                   <Button size="sm" variant="ghost" onClick={() => setRouteFor(app)}>
                     <Link2 size={13} /> Path
                   </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDomainsFor(app)}>
+                    <Globe size={13} /> Domains
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setFilesFor(app)}>
+                    <FolderOpen size={13} /> Files
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -223,6 +242,7 @@ export default function AppsPage() {
         open={open}
         onClose={() => setOpen(false)}
         presets={state?.presets ?? []}
+        hosts={knownHosts}
         onCreate={async (payload) => {
           await act("app.create", payload);
           setOpen(false);
@@ -252,11 +272,24 @@ export default function AppsPage() {
         <RouteModal
           key={routeFor.id}
           app={routeFor}
+          hosts={knownHosts}
           onClose={() => setRouteFor(null)}
           onSave={async (payload) => {
             await act("app.route", { name: routeFor.name, ...payload });
             setRouteFor(null);
           }}
+        />
+      )}
+
+      {filesFor && <FileManager key={filesFor.id} app={filesFor.name} onClose={() => setFilesFor(null)} />}
+
+      {domainsFor && (
+        <DomainsModal
+          key={domainsFor.id}
+          app={domainsFor}
+          domains={state?.domains ?? []}
+          hosts={knownHosts}
+          onClose={() => setDomainsFor(null)}
         />
       )}
     </>
@@ -267,11 +300,13 @@ function CreateAppModal({
   open,
   onClose,
   presets,
+  hosts,
   onCreate,
 }: {
   open: boolean;
   onClose: () => void;
   presets: RuntimePreset[];
+  hosts: string[];
   onCreate: (payload: Record<string, unknown>) => Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -362,8 +397,16 @@ function CreateAppModal({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Domain" hint="Traefik requests a Let's Encrypt certificate automatically.">
-            <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="app.example.com" />
+          <Field
+            label="Domain"
+            hint="Pick an existing domain or type a new one. Traefik requests the certificate automatically."
+          >
+            <Input
+              list="caagil-domain-options"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="app.example.com"
+            />
           </Field>
           <Field label="Container port" hint={preset ? `Preset default: ${preset.port}` : undefined}>
             <Input
@@ -375,6 +418,12 @@ function CreateAppModal({
           </Field>
         </div>
 
+        <datalist id="caagil-domain-options">
+          {hosts.map((host) => (
+            <option key={host} value={host} />
+          ))}
+        </datalist>
+
         <div className="rounded-xl border border-white/5 bg-ink-950/50 p-3">
           <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
             <Link2 size={12} /> Path route (optional)
@@ -384,9 +433,21 @@ function CreateAppModal({
               <Input value={pathPrefix} onChange={(e) => setPathPrefix(e.target.value)} placeholder="/blog" />
             </Field>
             <Field label="Host" hint="Defaults to this panel's domain.">
-              <Input value={pathHost} onChange={(e) => setPathHost(e.target.value)} placeholder="panel.example.com" />
+              <Input
+                list="caagil-domain-options"
+                value={pathHost}
+                onChange={(e) => setPathHost(e.target.value)}
+                placeholder="panel.example.com"
+              />
             </Field>
           </div>
+          {pathPrefix && (
+            <p className="mt-2 rounded-lg bg-ink-950/60 px-3 py-2 text-[11px] text-slate-400">
+              <Link2 size={11} className="mr-1 inline" />
+              https://{pathHost || hosts[0] || "<panel-domain>"}
+              {pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`}
+            </p>
+          )}
           <label className="mt-2 flex items-center gap-2 text-xs text-slate-400">
             <input
               type="checkbox"
@@ -442,10 +503,12 @@ function CreateAppModal({
 
 function RouteModal({
   app,
+  hosts,
   onClose,
   onSave,
 }: {
   app: AppRow;
+  hosts: string[];
   onClose: () => void;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
 }) {
@@ -481,9 +544,20 @@ function RouteModal({
             <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/blog" />
           </Field>
           <Field label="Host" hint="Defaults to this panel's domain.">
-            <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="panel.example.com" />
+            <Input
+              list="caagil-route-hosts"
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              placeholder="panel.example.com"
+            />
           </Field>
         </div>
+
+        <datalist id="caagil-route-hosts">
+          {hosts.map((item) => (
+            <option key={item} value={item} />
+          ))}
+        </datalist>
 
         <label className="flex items-center gap-2 text-xs text-slate-400">
           <input
@@ -518,6 +592,120 @@ function RouteModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function DomainsModal({
+  app,
+  domains,
+  hosts,
+  onClose,
+}: {
+  app: AppRow;
+  domains: DomainRow[];
+  hosts: string[];
+  onClose: () => void;
+}) {
+  const { act } = usePanel();
+  const [host, setHost] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mine = domains.filter((domain) => domain.app_id === app.id);
+  const free = hosts.filter((item) => !domains.some((domain) => domain.host === item));
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!host.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await act("domain.add", { host: host.trim(), app: app.id });
+      setHost("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await act("domain.remove", { id });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Domains · ${app.name}`}
+      description="Attach one or many hostnames. DNS must point at this server; certificates are automatic."
+    >
+      <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          list="caagil-domain-picker"
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
+          placeholder="new or existing domain"
+          className="flex-1"
+        />
+        <datalist id="caagil-domain-picker">
+          {free.map((item) => (
+            <option key={item} value={item} />
+          ))}
+        </datalist>
+        <Button type="submit" size="sm" loading={busy}>
+          <Plus size={13} /> Attach
+        </Button>
+      </form>
+
+      <div className="space-y-2">
+        {mine.length === 0 && (
+          <p className="rounded-xl border border-dashed border-white/10 px-3 py-6 text-center text-xs text-slate-500">
+            No domains yet. Type a new one above or pick an unassigned domain.
+          </p>
+        )}
+        {mine.map((domain) => (
+          <div
+            key={domain.id}
+            className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-ink-950/40 px-3 py-2"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-xs text-slate-200">{domain.host}</p>
+              <p className="text-[10px] text-slate-500">
+                {domain.cert} {app.domain === domain.host ? "· primary" : ""}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void remove(domain.id)}
+            >
+              <Trash2 size={13} />
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-[11px] leading-relaxed text-slate-500">
+        Tip: to serve this app at <span className="text-slate-300">domain/name</span>, use the Path
+        button instead of attaching a domain.
+      </p>
+
+      {error && (
+        <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {error}
+        </p>
+      )}
     </Modal>
   );
 }

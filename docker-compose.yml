@@ -53,8 +53,9 @@ services:
     environment:
       NODE_ENV: production
       AUTH_SECRET: ${AUTH_SECRET}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      CAAGIL_AUTO_ADMIN: ${CAAGIL_AUTO_ADMIN:-false}
       PANEL_DB_HOST: mysql
       PANEL_DB_PORT: 3306
       PANEL_DB_USER: caagil

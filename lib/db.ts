@@ -162,10 +162,17 @@ async function seed(pool: Pool) {
   const [rows] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS c FROM users");
   if (Number(rows[0]?.c ?? 0) > 0) return;
 
+  // Default: the first visitor creates the owner account at /setup.
+  // Set CAAGIL_AUTO_ADMIN=true for unattended provisioning.
+  if (process.env.CAAGIL_AUTO_ADMIN !== "true") {
+    console.log("[caagil] no users yet: first visit will open the setup wizard");
+    return;
+  }
+
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
   if (!email || !password) {
-    console.warn("[caagil] no users yet: set ADMIN_EMAIL and ADMIN_PASSWORD to create the owner account");
+    console.warn("[caagil] CAAGIL_AUTO_ADMIN=true but ADMIN_EMAIL/ADMIN_PASSWORD are missing");
     return;
   }
   const { hashPassword, randomId } = await import("./crypto");

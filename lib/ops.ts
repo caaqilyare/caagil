@@ -215,6 +215,19 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
   const existing = await one("SELECT id FROM apps WHERE name = ?", [name]);
   if (existing) throw new Error(`An app named "${name}" already exists.`);
 
+  const primaryHost = input.domain?.trim().toLowerCase() || null;
+  if (primaryHost) {
+    const attached = await one<{ app_name: string | null }>(
+      "SELECT a.name AS app_name FROM domains d LEFT JOIN apps a ON a.id = d.app_id WHERE d.host = ? LIMIT 1",
+      [primaryHost],
+    );
+    if (attached) {
+      throw new Error(
+        `${primaryHost} is already attached to ${attached.app_name ?? "another app"}. Remove it there first.`,
+      );
+    }
+  }
+
   if (input.gitUrl) await cloneOrPull(input.gitUrl, input.branch || null, name);
 
   const id = randomId("app");
@@ -233,7 +246,7 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
       input.command ?? preset.command ?? null,
       port,
       JSON.stringify(env),
-      input.domain?.toLowerCase() || null,
+      primaryHost,
       input.gitUrl || null,
       input.branch || null,
       preset.docRoot || null,
@@ -249,10 +262,10 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
     ],
   );
 
-  if (input.domain) {
+  if (primaryHost) {
     await execute("INSERT IGNORE INTO domains(id, host, app_id, cert, created_at) VALUES(?,?,?,?,?)", [
       randomId("dom"),
-      input.domain.toLowerCase(),
+      primaryHost,
       id,
       "letsencrypt",
       now,

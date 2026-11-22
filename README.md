@@ -21,8 +21,9 @@ Deploy        docker compose up -d --build  (portable, single directory)
 | Source | Clone from Git over HTTPS/SSH, redeploy with one click |
 | Databases | MySQL, MariaDB, PostgreSQL, MongoDB, Redis — on the internal network as `db-<name>` |
 | Remote DB | Publish a public port + `'user'@'%'` grant, or attach an external MySQL and query it read-only |
-| Domains | One or many hostnames per app, redirect HTTP → HTTPS, auto certificates |
+| Domains | Pick an existing domain or type a new one; attach many hostnames per app; auto certificates |
 | Path routing | Mount an app under `/name` on the panel domain (or any host), e.g. `https://panel.example.com/blog` |
+| Files | Built-in file manager per app: browse, edit, upload, rename and delete `data/sites/<app>` |
 | Access | Change the panel domain, rename the panel, or reach it at `http://IP` — all from Settings, no compose edits |
 | AI operator | Chat agent with 13 tools: create/delete apps, databases, domains, mount paths, read logs, system stats |
 | Ops | Live CPU/mem/disk, container logs, start/stop/restart, activity log |
@@ -30,14 +31,15 @@ Deploy        docker compose up -d --build  (portable, single directory)
 ## Local development
 
 ```bash
-cp .env.example .env      # fill PANEL_DB_* and ADMIN_*
+cp .env.example .env      # fill PANEL_DB_* — no admin account is needed
 npm install
-npm run dev               # http://localhost:4000
+npm run dev               # http://localhost:4000/setup
 ```
 
-You need a reachable MySQL for the panel database. The AI operator needs one of
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` (or set the key in
-Settings → AI).
+You need a reachable MySQL for the panel database. The first visit opens the
+setup wizard where you choose the owner username and password. The AI operator
+needs one of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` (or set
+the key in Settings → AI).
 
 ## One-line install (fresh server)
 
@@ -51,13 +53,26 @@ curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/boot
 
 It clones the repo to `/opt/caagil`, adds 4 GB swap on small hosts, installs
 Docker, generates secrets, writes the Traefik edge config, and boots the stack.
-The generated admin password is printed once — save it.
+The domain and email are optional — you can install with no domain and add one
+later.
+
+**First visit:** open `http://SERVER-IP` and create the owner account (username
+or email + password). The panel starts on plain HTTP so it works before DNS is
+configured. Afterwards open Settings → Panel domain to switch to HTTPS.
 
 Re-running the same command updates the code and keeps `.env`, app data and the
 edge config. To install a fork or private mirror:
 
 ```bash
 CAAGIL_REPO=git@github.com:you/caagil.git sudo -E bash scripts/bootstrap.sh
+```
+
+Unattended provisioning (skip the wizard):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/bootstrap.sh -o /tmp/bootstrap.sh
+sudo CAAGIL_AUTO_ADMIN=true ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='a-long-password' \
+  bash /tmp/bootstrap.sh panel.example.com you@example.com
 ```
 
 ## Change the panel domain (after install)
@@ -74,6 +89,21 @@ Settings → Panel:
 
 These write `/opt/caagil/edge/panel.yml`, which Traefik watches. No restart and
 no compose edits.
+
+## Create an app (domain or path)
+
+Apps → New application:
+
+- **Domain** — pick an existing hostname from the list or type a new one. It is
+  attached to the app and gets a certificate automatically.
+- **Path route** — leave the domain empty and set a path such as `/blog` to get
+  `https://panel.example.com/blog`. The host defaults to the panel domain; pick
+  another host to mount it on a different domain. "Strip prefix" is on by
+  default, so the app sees `/` instead of `/blog`.
+- **Domains** button — attach extra hostnames later (add-on domains).
+- **Files** button — open the file manager for `data/sites/<app>`: browse
+  folders, edit text files, upload (8 MB), rename and delete. Downloads are
+  authenticated by your panel session.
 
 ## Portability / migrating to another host
 
