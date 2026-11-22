@@ -292,6 +292,7 @@ header('Content-Type: text/html; charset=utf-8');
 /** Landing placeholders so a fresh app (no git) answers immediately instead of 403. */
 async function ensureFreshRuntime(appName: string, preset: RuntimePreset, port: number): Promise<void> {
   const dir = path.join(SITES_DIR, appName);
+  await fs.mkdir(dir, { recursive: true });
   if (preset.group === "static") {
     const idx = path.join(dir, "index.html");
     if (await fileExists(idx)) return;
@@ -330,6 +331,7 @@ async function ensureFreshRuntime(appName: string, preset: RuntimePreset, port: 
 
 /** Laravel-style repos keep the real entry point in <dir>/public — rewrite /. */
 async function writeLaravelRewrite(dir: string): Promise<void> {
+  await fs.mkdir(path.join(dir, "public"), { recursive: true });
   const pubIndex = path.join(dir, "public", "index.php");
   if (!(await fileExists(pubIndex))) return;
   const ht = path.join(dir, ".htaccess");
