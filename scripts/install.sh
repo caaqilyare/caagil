@@ -111,6 +111,16 @@ if [ -n "$PANEL_DOMAIN" ] && [ -z "$ACME_EMAIL" ]; then
 fi
 
 # ── edge routing (Traefik file provider) ─────────────────────────
+# On re-runs, report the credentials that actually exist in .env.
+if [ -f .env ]; then
+  saved_email="$(grep -m1 '^ADMIN_EMAIL=' .env | cut -d= -f2- || true)"
+  saved_pass="$(grep -m1 '^ADMIN_PASSWORD=' .env | cut -d= -f2- || true)"
+  saved_domain="$(grep -m1 '^PANEL_DOMAIN=' .env | cut -d= -f2- || true)"
+  if [ -n "$saved_email" ]; then ADMIN_EMAIL="$saved_email"; fi
+  if [ -n "$saved_pass" ]; then ADMIN_PASSWORD="$saved_pass"; fi
+  if [ -n "$saved_domain" ]; then PANEL_DOMAIN="$saved_domain"; fi
+fi
+
 ip=$(curl -s -4 --max-time 6 https://ifconfig.me/ip 2>/dev/null || true)
 if ! printf '%s' "$ip" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
   ip=$(hostname -I 2>/dev/null | awk '{print $1}')
