@@ -64,7 +64,8 @@ export default function AppsPage() {
     setBusy(name);
     setError(null);
     try {
-      await act(action, { name, ...payload });
+      const result = await act<{ warning?: string | null }>(action, { name, ...payload });
+      if (result?.warning) setError(`Deleted, but ${result.warning}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

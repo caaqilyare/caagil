@@ -29,13 +29,15 @@ export async function POST(req: Request) {
   }
 
   const id = randomId("usr");
-  await execute("INSERT INTO users(id, email, password, role, created_at) VALUES(?,?,?,?,?)", [
-    id,
-    login,
-    hashPassword(password),
-    "owner",
-    Date.now(),
-  ]);
+  // Conditional insert: only the first setup request can create the owner.
+  const created = await execute(
+    `INSERT INTO users(id, email, password, role, created_at)
+     SELECT ?,?,?,?,? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM users)`,
+    [id, login, hashPassword(password), "owner", Date.now()],
+  );
+  if (created.affectedRows !== 1) {
+    return NextResponse.json({ error: "Setup is already complete." }, { status: 403 });
+  }
   if (panelName) await setSetting("panel_name", panelName.slice(0, 40));
 
   const proto = req.headers.get("x-forwarded-proto") ?? new URL(req.url).protocol.replace(/:$/, "");

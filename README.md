@@ -48,17 +48,22 @@ Requirements: Ubuntu/Debian, root SSH, 1.5 GB RAM, 15 GB+ disk. Point a DNS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/bootstrap.sh \
-  | sudo bash -s -- panel.example.com you@example.com
+  | sudo bash
 ```
 
 It clones the repo to `/opt/caagil`, adds 4 GB swap on small hosts, installs
 Docker, generates secrets, writes the Traefik edge config, and boots the stack.
-The domain and email are optional — you can install with no domain and add one
-later.
 
-**First visit:** open `http://SERVER-IP` and create the owner account (username
-or email + password). The panel starts on plain HTTP so it works before DNS is
-configured. Afterwards open Settings → Panel domain to switch to HTTPS.
+**First visit:** open `http://SERVER-IP` and choose the owner username (or
+email) and password. The panel starts on plain HTTP so it works before DNS.
+Then go to Settings → Panel domain, enter your domain, point DNS at the server,
+and HTTPS is issued automatically.
+
+To install with a domain from the start, pass it as an argument:
+
+```bash
+curl -fsSL …/bootstrap.sh | sudo bash -s -- panel.example.com you@example.com
+```
 
 Re-running the same command updates the code and keeps `.env`, app data and the
 edge config. To install a fork or private mirror:

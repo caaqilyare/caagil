@@ -8,8 +8,11 @@ cd "$DIR"
 
 PANEL_DOMAIN="${PANEL_DOMAIN:-${1:-}}"
 PANEL_NAME="${PANEL_NAME:-Caagil}"
-ACME_EMAIL="${ACME_EMAIL:-${2:-admin@${PANEL_DOMAIN:-localhost}}}"
+ACME_EMAIL="${ACME_EMAIL:-${2:-}}"
 PANEL_DOMAIN="$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')"
+if [ -n "$PANEL_DOMAIN" ] && [ -z "$ACME_EMAIL" ]; then
+  ACME_EMAIL="admin@${PANEL_DOMAIN}"
+fi
 # The first visit creates the owner account. For unattended installs set
 # CAAGIL_AUTO_ADMIN=true together with ADMIN_EMAIL and ADMIN_PASSWORD.
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"

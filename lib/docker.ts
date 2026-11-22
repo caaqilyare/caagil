@@ -109,14 +109,33 @@ export function traefikLabels(
   return labels;
 }
 
-export async function removeContainerSafe(containerId: string | null | undefined) {
-  if (!containerId) return;
-  try {
-    const c = docker.getContainer(containerId);
-    await c.stop({ t: 5 }).catch(() => {});
-    await c.remove({ force: true, v: true });
-  } catch {
-    /* already gone */
+/**
+ * Remove a managed container by id and/or name. Never throws for a container
+ * that is already gone; retries once for containers stuck in removal.
+ */
+export async function removeContainerSafe(
+  containerId: string | null | undefined,
+  name?: string,
+): Promise<void> {
+  const candidates = new Set<string>();
+  if (containerId) candidates.add(containerId);
+  if (name) candidates.add(containerName(name));
+
+  for (const id of candidates) {
+    const container = docker.getContainer(id);
+    try {
+      const info = await container.inspect();
+      if (info.State?.Running) await container.kill().catch(() => {});
+    } catch {
+      continue; // already gone
+    }
+    try {
+      await container.remove({ force: true, v: true });
+    } catch {
+      // Docker can report "removal in progress" — give it a moment and retry.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await container.remove({ force: true, v: true });
+    }
   }
 }
 

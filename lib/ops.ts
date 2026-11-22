@@ -334,12 +334,17 @@ export async function appAction(
   if (!app) throw new Error("App not found");
 
   if (action === "delete") {
-    await removeContainerSafe(app.container_id);
+    let warning: string | null = null;
+    try {
+      await removeContainerSafe(app.container_id, app.name);
+    } catch (err) {
+      warning = `container cleanup failed (${err instanceof Error ? err.message : String(err)})`;
+    }
     await execute("DELETE FROM domains WHERE app_id = ?", [app.id]);
     await execute("DELETE FROM apps WHERE id = ?", [app.id]);
     await fs.rm(path.join(SITES_DIR, app.name), { recursive: true, force: true }).catch(() => {});
-    await logActivity("app.delete", app.name, actor);
-    return { deleted: true };
+    await logActivity("app.delete", warning ? `${app.name} (${warning})` : app.name, actor);
+    return { deleted: true, warning };
   }
 
   if (!app.container_id) throw new Error("App has no container yet — redeploy it first.");
@@ -577,7 +582,7 @@ export async function databaseAction(
   if (!db) throw new Error("Database not found");
 
   if (action === "delete") {
-    await removeContainerSafe(db.container_id);
+    await removeContainerSafe(db.container_id, `db-${db.name}`);
     try {
       await docker.getVolume(db.volume!).remove();
     } catch {
