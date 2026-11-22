@@ -1,0 +1,124 @@
+# Caagil
+
+A small, fast, AI-native hosting control panel. One container, one MySQL, one
+Traefik — it deploys PHP, Node.js and static sites, runs databases with optional
+public access, and ships an AI operator that can actually do the work.
+
+```
+Panel UI      Next.js 15 (App Router) + Tailwind, dark glass UI
+Panel data    MySQL 8.4 (sessions, apps, databases, domains, activity)
+Apps          Docker containers on the `caagil` bridge network
+Routing       Traefik v3 + Let's Encrypt (HTTP-01), automatic HTTPS
+AI            OpenAI · Anthropic · DeepSeek via Vercel AI SDK, tool calling
+Deploy        docker compose up -d --build  (portable, single directory)
+```
+
+## What it does
+
+| Area | Capability |
+| --- | --- |
+| Applications | PHP 8.2/8.3/8.4 (Apache), Laravel, WordPress, Node 20/22, static Nginx, any custom image |
+| Source | Clone from Git over HTTPS/SSH, redeploy with one click |
+| Databases | MySQL, MariaDB, PostgreSQL, MongoDB, Redis — on the internal network as `db-<name>` |
+| Remote DB | Publish a public port + `'user'@'%'` grant, or attach an external MySQL and query it read-only |
+| Domains | One or many hostnames per app, redirect HTTP → HTTPS, auto certificates |
+| Path routing | Mount an app under `/name` on the panel domain (or any host), e.g. `https://panel.example.com/blog` |
+| Access | Change the panel domain, rename the panel, or reach it at `http://IP` — all from Settings, no compose edits |
+| AI operator | Chat agent with 13 tools: create/delete apps, databases, domains, mount paths, read logs, system stats |
+| Ops | Live CPU/mem/disk, container logs, start/stop/restart, activity log |
+
+## Local development
+
+```bash
+cp .env.example .env      # fill PANEL_DB_* and ADMIN_*
+npm install
+npm run dev               # http://localhost:4000
+```
+
+You need a reachable MySQL for the panel database. The AI operator needs one of
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` (or set the key in
+Settings → AI).
+
+## One-line install (fresh server)
+
+Requirements: Ubuntu/Debian, root SSH, 1.5 GB RAM, 15 GB+ disk. Point a DNS
+`A` record at the server first (or use the automatic IP fallback).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/bootstrap.sh \
+  | sudo bash -s -- panel.example.com you@example.com
+```
+
+It clones the repo to `/opt/caagil`, adds 4 GB swap on small hosts, installs
+Docker, generates secrets, writes the Traefik edge config, and boots the stack.
+The generated admin password is printed once — save it.
+
+Re-running the same command updates the code and keeps `.env`, app data and the
+edge config. To install a fork or private mirror:
+
+```bash
+CAAGIL_REPO=git@github.com:you/caagil.git sudo -E bash scripts/bootstrap.sh
+```
+
+## Change the panel domain (after install)
+
+Settings → Panel:
+
+- **Panel domain** — serve the panel on a new hostname. Point DNS at the server
+  first; Traefik requests the certificate automatically. Apps mounted under
+  `/path` on the old domain are moved to the new one.
+- **Public IP** + **IP access** — also serve the panel at `http://IP` (no
+  certificate needed). Useful before DNS is ready or for recovery. Plain HTTP
+  sends the password unencrypted, so turn it off once HTTPS works.
+- **Panel name** — rebrand the UI.
+
+These write `/opt/caagil/edge/panel.yml`, which Traefik watches. No restart and
+no compose edits.
+
+## Portability / migrating to another host
+
+Everything lives in `/opt/caagil`:
+
+```
+/opt/caagil/docker-compose.yml   stack definition
+/opt/caagil/.env                 secrets
+/opt/caagil/edge/panel.yml       panel domain + IP routing (Traefik file provider)
+/opt/caagil/data/sites/          app sources, bind-mounted into every app (Git or uploaded)
+Docker volumes: caagil-mysql, caagil-letsencrypt, caagil-db-<name>
+```
+
+Move to another server:
+
+```bash
+# old host
+docker compose down
+tar czf caagil-backup.tgz .env docker-compose.yml edge data
+docker run --rm -v caagil-mysql:/v -v $PWD:/out alpine tar czf /out/mysql.tgz -C /v .
+
+# new host
+scp caagil-backup.tgz root@new-host:/opt/caagil/
+cd /opt/caagil && tar xzf caagil-backup.tgz
+docker compose up -d --build
+```
+
+Application data volumes (`caagil-db-*`) can be migrated the same way. DNS
+points at the new IP and certificates are re-issued automatically.
+
+## Resource notes
+
+2 GB RAM is the floor. A busy stack (panel + MySQL + MongoDB + two apps) wants
+4 GB. The installer adds 4 GB swap so Docker builds do not OOM the host. Keep an
+eye on Settings → disk: build cache is the usual culprit.
+
+```bash
+docker system prune -af --volumes   # reclaim space when needed
+```
+
+## Security model
+
+- Sessions are server-side rows; cookies are `httpOnly`, signed with `AUTH_SECRET`.
+- Passwords use scrypt with per-user salt.
+- The panel mounts `/var/run/docker.sock` — it is root-equivalent on the host, so
+  only expose it behind HTTPS and a strong admin password.
+- Remote database access is opt-in per database, with generated 24-char passwords.
+- AI keys are stored in MySQL and never sent to the browser.

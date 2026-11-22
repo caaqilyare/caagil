@@ -1,0 +1,88 @@
+name: caagil
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${PANEL_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: caagil
+      MYSQL_USER: caagil
+      MYSQL_PASSWORD: ${PANEL_DB_PASSWORD}
+    volumes:
+      - caagil-mysql:/var/lib/mysql
+    networks:
+      - caagil
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${PANEL_DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  traefik:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=caagil
+      - --providers.file.directory=/edge
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - caagil-letsencrypt:/letsencrypt
+      - ${CAAGIL_EDGE_DIR:-/opt/caagil/edge}:/edge:ro
+    networks:
+      - caagil
+
+  panel:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      AUTH_SECRET: ${AUTH_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PANEL_DB_HOST: mysql
+      PANEL_DB_PORT: 3306
+      PANEL_DB_USER: caagil
+      PANEL_DB_PASSWORD: ${PANEL_DB_PASSWORD}
+      PANEL_DB_NAME: caagil
+      DATA_DIR: /app/data
+      HOST_DATA_DIR: ${CAAGIL_DATA_DIR:-/opt/caagil/data}
+      DOCKER_SOCKET: /var/run/docker.sock
+      PANEL_NETWORK: caagil
+      PANEL_DOMAIN: ${PANEL_DOMAIN}
+      PANEL_URL: https://${PANEL_DOMAIN}
+      EDGE_DIR: /edge
+      NEXT_PUBLIC_PANEL_NAME: ${PANEL_NAME:-Caagil}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CAAGIL_DATA_DIR:-/opt/caagil/data}:/app/data
+      - ${CAAGIL_EDGE_DIR:-/opt/caagil/edge}:/edge
+    networks:
+      - caagil
+
+volumes:
+  caagil-mysql:
+  caagil-letsencrypt:
+
+networks:
+  caagil:
+    name: caagil
+    driver: bridge
