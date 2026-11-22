@@ -189,7 +189,7 @@ export default function AppsPage() {
                     size="sm"
                     variant="ghost"
                     loading={busy === `restart-${app.name}`}
-                    onClick={() => run(`restart-${app.name}`, "app.restart")}
+                    onClick={() => run(`restart-${app.name}`, "app.restart", { name: app.name })}
                   >
                     <RefreshCw size={13} /> Restart
                   </Button>
@@ -198,7 +198,7 @@ export default function AppsPage() {
                       size="sm"
                       variant="ghost"
                       loading={busy === `stop-${app.name}`}
-                      onClick={() => run(`stop-${app.name}`, "app.stop")}
+                      onClick={() => run(`stop-${app.name}`, "app.stop", { name: app.name })}
                     >
                       <Square size={12} /> Stop
                     </Button>
@@ -207,7 +207,7 @@ export default function AppsPage() {
                       size="sm"
                       variant="ghost"
                       loading={busy === `start-${app.name}`}
-                      onClick={() => run(`start-${app.name}`, "app.start")}
+                      onClick={() => run(`start-${app.name}`, "app.start", { name: app.name })}
                     >
                       <Play size={12} /> Start
                     </Button>
@@ -216,7 +216,7 @@ export default function AppsPage() {
                     size="sm"
                     variant="subtle"
                     loading={busy === `redeploy-${app.name}`}
-                    onClick={() => run(`redeploy-${app.name}`, "app.redeploy")}
+                    onClick={() => run(`redeploy-${app.name}`, "app.redeploy", { name: app.name })}
                   >
                     <RefreshCw size={13} /> Redeploy
                   </Button>
@@ -226,7 +226,7 @@ export default function AppsPage() {
                     loading={busy === `delete-${app.name}`}
                     onClick={() => {
                       if (confirm(`Delete ${app.name}? Container and source files are removed.`)) {
-                        void run(`delete-${app.name}`, "app.delete");
+                        void run(`delete-${app.name}`, "app.delete", { name: app.name });
                       }
                     }}
                   >
