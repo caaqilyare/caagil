@@ -72,6 +72,8 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       return ops.appAction(s("name"), action.split(".")[1] as "start" | "stop" | "restart" | "delete", actor);
     case "app.redeploy":
       return ops.redeployApp(s("name"), actor);
+    case "app.env":
+      return ops.setAppEnv(s("name"), (p.env as Record<string, string>) ?? {}, actor);
     case "app.wpinstall":
       return ops.startWpInstall(
         s("name"),

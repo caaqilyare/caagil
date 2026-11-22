@@ -679,6 +679,21 @@ export async function redeployApp(id: string, actor = "system") {  const app = a
   return (await getApp(id))!;
 }
 
+/** Replace an app's environment (used to push runtime fixes such as the
+ * WordPress path-prefix snippet into running containers). */
+export async function setAppEnv(
+  id: string,
+  env: Record<string, string>,
+  actor = "system",
+): Promise<AppRow> {
+  const app = await getApp(id);
+  if (!app) throw new Error("App not found");
+  await execute("UPDATE apps SET env = ? WHERE id = ?", [JSON.stringify(env), app.id]);
+  await applyApp(app);
+  await logActivity("app.env", app.name, actor);
+  return (await getApp(id))!;
+}
+
 export async function appAction(
   id: string,
   action: "start" | "stop" | "restart" | "delete",
