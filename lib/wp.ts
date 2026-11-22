@@ -134,9 +134,19 @@ export function siteUrlFor(app: {
   return null;
 }
 
-/** Ensure wp-config.php carries the path-prefix aware snippet even for
- * installs created before this fix (wp-config.php is written once and persists). */
-async function ensureWpConfigPrefix(appName: string, prefix: string | null): Promise<void> {
+async function restartAppContainer(containerId: string | null): Promise<void> {
+  if (!containerId) return;
+  try {
+    const c = docker.getContainer(containerId);
+    const info = await c.inspect();
+    if (info.State?.Running) await c.restart();
+  } catch {
+    /* best effort — wp-config is re-read per request anyway */
+  }
+}
+
+/** Ensure wp-config.php keeps the public path prefix for existing installs: ... */
+async function ensureWpConfigPrefix(appName: string, prefix: string): Promise<void> {
   const wpConfig = path.join(HOST_SITES_DIR, appName, "wp-config.php");
   let cfg: string;
   try {
@@ -144,11 +154,15 @@ async function ensureWpConfigPrefix(appName: string, prefix: string | null): Pro
   } catch {
     return; // no wp-config yet — the container entrypoint will write it from env
   }
-  if (cfg.includes("HTTP_X_FORWARDED_PREFIX")) return; // already patched
-  const snippet =
-    `if (isset($_SERVER['HTTP_X_FORWARDED_PREFIX']) && strpos($_SERVER['HTTP_X_FORWARDED_PREFIX'], '${prefix}') === 0) {` +
-    ` $_SERVER['REQUEST_URI'] = $_SERVER['HTTP_X_FORWARDED_PREFIX'] . $_SERVER['REQUEST_URI']; }`;
-  const body = cfg.replace(/\?>\s*$/, (m) => snippet + "\n?>\n");
+  const marker = "HTTP_X_FORWARDED_PREFIX";
+  if (cfg.includes(marker)) return; // already patched
+  const snip = [
+    `if (isset($_SERVER['HTTP_X_FORWARDED_PREFIX']) && strpos($_SERVER['HTTP_X_FORWARDED_PREFIX'], '${prefix}') === 0) {`,
+    "\t$_SERVER['REQUEST_URI'] = $_SERVER['HTTP_X_FORWARDED_PREFIX'] . $_SERVER['REQUEST_URI'];",
+    "}",
+  ].join("\n");
+  const oldBlock = `if ($configExtra = getenv_docker('WORDPRESS_CONFIG_EXTRA', '')) {\n\teval($configExtra);\n}`;
+  const body = cfg.includes(oldBlock) ? cfg.replace(oldBlock, oldBlock + "\n" + snip) : cfg + "\n\n" + snip;
   await fs.writeFile(wpConfig, body);
 }
 
@@ -230,8 +244,10 @@ export async function installWordPress(
   // keep a wp-config.php without the path-prefix snippet — patch it in so
   // wp-admin behind a path route keeps the prefix.
   const wpPrefix = app.path_prefix ? (app.path_prefix.startsWith("/") ? app.path_prefix : `/${app.path_prefix}`) : null;
-  if (wpPrefix) await ensureWpConfigPrefix(app.name, wpPrefix);
-
+  if (wpPrefix) {
+    await ensureWpConfigPrefix(app.name, wpPrefix);
+    await restartAppContainer(app.container_id);
+  }
   const title = input.title?.trim() || app.name;
   const adminUser = (input.adminUser?.trim() || "admin").replace(/[^a-zA-Z0-9_.@-]/g, "") || "admin";
   const adminPassword = input.adminPassword?.trim() || shortPassword(16);
