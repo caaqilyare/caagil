@@ -135,8 +135,14 @@ export async function panelEdgeSettings(): Promise<PanelEdge> {
     getSetting("public_ip"),
     getSetting("allow_ip_access"),
   ]);
+  // An empty string means "IP-only" — only fall back to the env default when
+  // the setting has never been written.
+  const resolvedDomain =
+    domain === null
+      ? process.env.PANEL_DOMAIN?.trim().toLowerCase() || null
+      : domain.trim().toLowerCase() || null;
   return {
-    domain: domain?.trim().toLowerCase() || process.env.PANEL_DOMAIN?.trim().toLowerCase() || null,
+    domain: resolvedDomain,
     ip: ip?.trim() || null,
     allowIp: allowIp === "1",
   };
