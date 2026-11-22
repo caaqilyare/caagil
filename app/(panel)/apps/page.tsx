@@ -3,12 +3,17 @@
 import { useState } from "react";
 import {
   Boxes,
+  Check,
   Copy,
+  Database,
   ExternalLink,
+  Eye,
+  EyeOff,
   FileCode2,
   FolderOpen,
   GitBranch,
   Globe,
+  KeyRound,
   Link2,
   Play,
   Plus,
@@ -33,7 +38,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { usePanel } from "@/lib/client";
-import type { AppRow } from "@/lib/ops";
+import type { AppDbRow, AppRow } from "@/lib/ops";
 import type { DomainRow } from "@/lib/client";
 import type { RuntimePreset } from "@/lib/presets";
 
@@ -49,6 +54,16 @@ function parseEnv(text: string): Record<string, string> {
   return out;
 }
 
+function generatePassword(length = 16): string {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
+
+const isWpApp = (app: { runtime: string; image: string }) =>
+  /wordpress/i.test(`${app.runtime} ${app.image}`);
+
 export default function AppsPage() {
   const { state, loading, act } = usePanel();
   const [open, setOpen] = useState(false);
@@ -56,6 +71,7 @@ export default function AppsPage() {
   const [routeFor, setRouteFor] = useState<AppRow | null>(null);
   const [filesFor, setFilesFor] = useState<AppRow | null>(null);
   const [domainsFor, setDomainsFor] = useState<AppRow | null>(null);
+  const [wpFor, setWpFor] = useState<AppRow | null>(null);
   const [logs, setLogs] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -170,9 +186,29 @@ export default function AppsPage() {
                       {app.path_prefix}
                     </a>
                   )}
+                  {isWpApp(app) && (
+                    <a
+                      href={
+                        app.domain
+                          ? `https://${app.domain}/wp-admin`
+                          : `https://${app.path_host}${app.path_prefix}/wp-admin`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1.5 ml-3 inline-flex items-center gap-1 text-xs text-amber-300 hover:underline"
+                    >
+                      <KeyRound size={11} /> wp-admin
+                    </a>
+                  )}
+                  {app.wp_db && <DbCredentials db={app.wp_db} />}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {isWpApp(app) && (
+                    <Button size="sm" variant="ghost" onClick={() => setWpFor(app)}>
+                      <KeyRound size={13} /> WP
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => showLogs(app)}>
                     <ScrollText size={13} /> Logs
                   </Button>
@@ -244,6 +280,7 @@ export default function AppsPage() {
         onClose={() => setOpen(false)}
         presets={state?.presets ?? []}
         hosts={knownHosts}
+        userEmail={state?.user.email ?? ""}
         onCreate={async (payload) => {
           await act("app.create", payload);
           setOpen(false);
@@ -293,6 +330,15 @@ export default function AppsPage() {
           onClose={() => setDomainsFor(null)}
         />
       )}
+
+      {wpFor && (
+        <WpInstallModal
+          key={wpFor.id}
+          app={wpFor}
+          userEmail={state?.user.email ?? ""}
+          onClose={() => setWpFor(null)}
+        />
+      )}
     </>
   );
 }
@@ -302,13 +348,15 @@ function CreateAppModal({
   onClose,
   presets,
   hosts,
+  userEmail,
   onCreate,
 }: {
   open: boolean;
   onClose: () => void;
   presets: RuntimePreset[];
   hosts: string[];
-  onCreate: (payload: Record<string, unknown>) => Promise<void>;
+  userEmail: string;
+  onCreate: (payload: Record<string, unknown>) => Promise<{ wp_warning?: string | null } | void>;
 }) {
   const [name, setName] = useState("");
   const [presetId, setPresetId] = useState("php84");
@@ -323,16 +371,26 @@ function CreateAppModal({
   const [envText, setEnvText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  const [wpAuto, setWpAuto] = useState(true);
+  const [wpTitle, setWpTitle] = useState("");
+  const [wpUser, setWpUser] = useState("admin");
+  const [wpPass, setWpPass] = useState(() => generatePassword());
+  const [wpShowPass, setWpShowPass] = useState(false);
+  const [wpEmail, setWpEmail] = useState(userEmail);
 
   const preset = presets.find((p) => p.id === presetId);
   const isCustom = presetId === "custom";
+  const isWp = presetId === "wordpress";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setWarning(null);
     try {
-      await onCreate({
+      const res = await onCreate({
         name,
         preset: presetId,
         image: isCustom ? image : undefined,
@@ -344,13 +402,28 @@ function CreateAppModal({
         pathHost: pathHost || undefined,
         stripPrefix,
         env: parseEnv(envText),
+        wp: isWp
+          ? {
+              autoInstall: wpAuto,
+              title: wpTitle || name,
+              adminUser: wpUser || "admin",
+              adminPassword: wpPass,
+              adminEmail: wpEmail || userEmail,
+            }
+          : undefined,
       });
-      setName("");
-      setGitUrl("");
-      setDomain("");
-      setPathPrefix("");
-      setPathHost("");
-      setEnvText("");
+      if (res?.wp_warning) {
+        setWarning(res.wp_warning);
+      } else {
+        setName("");
+        setGitUrl("");
+        setDomain("");
+        setPathPrefix("");
+        setPathHost("");
+        setEnvText("");
+        setWpPass(generatePassword());
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -460,6 +533,78 @@ function CreateAppModal({
           </label>
         </div>
 
+        {isWp && (
+          <div className="space-y-3 rounded-xl border border-brand-500/25 bg-brand-500/5 p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-brand-300">
+              <KeyRound size={12} /> WordPress one-click install
+            </p>
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={wpAuto}
+                onChange={(e) => setWpAuto(e.target.checked)}
+                className="h-3.5 w-3.5 accent-brand-500"
+              />
+              Auto-install with its own MySQL database, admin account and SSL URL (recommended)
+            </label>
+            {wpAuto && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Site title">
+                    <Input
+                      value={wpTitle}
+                      onChange={(e) => setWpTitle(e.target.value)}
+                      placeholder={name || "My WordPress site"}
+                    />
+                  </Field>
+                  <Field label="Admin username">
+                    <Input value={wpUser} onChange={(e) => setWpUser(e.target.value)} placeholder="admin" />
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Admin password" hint="Copy it now — you need it to log in to wp-admin.">
+                    <div className="flex gap-1.5">
+                      <Input
+                        type={wpShowPass ? "text" : "password"}
+                        value={wpPass}
+                        onChange={(e) => setWpPass(e.target.value)}
+                        className="font-mono"
+                      />
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setWpPass(generatePassword())}>
+                        <RefreshCw size={13} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setWpShowPass((v) => !v)}
+                      >
+                        {wpShowPass ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </Button>
+                    </div>
+                  </Field>
+                  <Field label="Admin email">
+                    <Input
+                      type="email"
+                      value={wpEmail}
+                      onChange={(e) => setWpEmail(e.target.value)}
+                      placeholder={userEmail || "you@example.com"}
+                    />
+                  </Field>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  A database <Code>wp_{name || "&lt;name&gt;"}</Code> is created on the panel MySQL
+                  server. If you do not pick a domain or path, the site is served at{" "}
+                  <Code>
+                    {hosts[0] || "&lt;panel-domain&gt;"}/{name || "&lt;name&gt;"}
+                  </Code>
+                  . The install finishes about a minute after the container starts.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {isCustom && (
           <Field label="Docker image" hint="Any image that listens on the port above.">
             <Input value={image} onChange={(e) => setImage(e.target.value)} placeholder="ghcr.io/you/app:latest" />
@@ -482,6 +627,24 @@ function CreateAppModal({
           <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
             {error}
           </p>
+        )}
+
+        {warning && (
+          <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            <p>{warning}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="mt-1"
+              onClick={() => {
+                setWarning(null);
+                onClose();
+              }}
+            >
+              Close
+            </Button>
+          </div>
         )}
 
         <div className="flex items-center justify-between gap-3">
@@ -706,6 +869,182 @@ function DomainsModal({
         <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
           {error}
         </p>
+      )}
+    </Modal>
+  );
+}
+
+function DbCredentials({ db }: { db: AppDbRow }) {
+  const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard
+      ?.writeText(`host: ${db.host}\ndatabase: ${db.name}\nuser: ${db.username}\npassword: ${db.password}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-white/5 bg-ink-950/50 px-2.5 py-1.5 text-[11px]">
+      <span className="flex items-center gap-1 font-medium text-slate-300">
+        <Database size={11} /> MySQL
+      </span>
+      <Code>{db.name}</Code>
+      <span className="text-slate-500">user</span>
+      <Code>{db.username}</Code>
+      <span className="text-slate-500">pass</span>
+      <Code>{show ? db.password : "••••••••••"}</Code>
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        className="text-slate-500 hover:text-slate-300"
+        aria-label={show ? "Hide password" : "Show password"}
+      >
+        {show ? <EyeOff size={12} /> : <Eye size={12} />}
+      </button>
+      <button
+        type="button"
+        onClick={copy}
+        className="text-slate-500 hover:text-slate-300"
+        aria-label="Copy database credentials"
+      >
+        {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+      </button>
+      <span className="text-slate-600">{db.host}</span>
+    </div>
+  );
+}
+
+function WpInstallModal({
+  app,
+  userEmail,
+  onClose,
+}: {
+  app: AppRow;
+  userEmail: string;
+  onClose: () => void;
+}) {
+  const { act } = usePanel();
+  const [title, setTitle] = useState(app.name);
+  const [adminUser, setAdminUser] = useState("admin");
+  const [adminPass, setAdminPass] = useState(() => generatePassword());
+  const [showPass, setShowPass] = useState(false);
+  const [email, setEmail] = useState(userEmail);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ url: string; adminUser: string } | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await act<{ url: string; adminUser: string }>("app.wpinstall", {
+        name: app.name,
+        title,
+        adminUser: adminUser || "admin",
+        adminPassword: adminPass,
+        adminEmail: email || userEmail,
+      });
+      setDone(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`WordPress install · ${app.name}`}
+      description="Creates the database tables, the site and an admin account on the running app."
+    >
+      {done ? (
+        <div className="space-y-3">
+          <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+            WordPress is installed and ready.
+          </p>
+          <p className="text-xs text-slate-400">
+            Site: <Code>{done.url}</Code>
+            <br />
+            Admin user: <Code>{done.adminUser}</Code> — the password is the one you entered.
+          </p>
+          <div className="flex justify-end gap-2">
+            <a
+              href={`${done.url}/wp-admin`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/5"
+            >
+              <ExternalLink size={12} /> Open wp-admin
+            </a>
+            <Button size="sm" onClick={onClose}>
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Site title">
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={app.name} />
+            </Field>
+            <Field label="Admin username">
+              <Input value={adminUser} onChange={(e) => setAdminUser(e.target.value)} placeholder="admin" />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Admin password" hint="You will use this to log in to wp-admin.">
+              <div className="flex gap-1.5">
+                <Input
+                  type={showPass ? "text" : "password"}
+                  value={adminPass}
+                  onChange={(e) => setAdminPass(e.target.value)}
+                  className="font-mono"
+                />
+                <Button type="button" variant="ghost" size="sm" onClick={() => setAdminPass(generatePassword())}>
+                  <RefreshCw size={13} />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowPass((v) => !v)}>
+                  {showPass ? <EyeOff size={13} /> : <Eye size={13} />}
+                </Button>
+              </div>
+            </Field>
+            <Field label="Admin email">
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={userEmail || "you@example.com"}
+              />
+            </Field>
+          </div>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            If the app already has an admin user, this creates a second one. The site URL is taken
+            from the app&apos;s domain or path route.
+          </p>
+
+          {error && (
+            <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {error}
+            </p>
+          )}
+
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" loading={busy}>
+              <KeyRound size={13} /> Install WordPress
+            </Button>
+          </div>
+        </form>
       )}
     </Modal>
   );

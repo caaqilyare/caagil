@@ -18,6 +18,7 @@ Deploy        docker compose up -d --build  (portable, single directory)
 | Area | Capability |
 | --- | --- |
 | Applications | PHP 8.2/8.3/8.4 (Apache), Laravel, WordPress, Node 20/22, static Nginx, any custom image |
+| WordPress one-click | Auto-install with its own MySQL database, admin user + password, and a live URL — cPanel/Softaculous style |
 | Source | Clone from Git over HTTPS/SSH, redeploy with one click |
 | Databases | MySQL, MariaDB, PostgreSQL, MongoDB, Redis — on the internal network as `db-<name>` |
 | Remote DB | Publish a public port + `'user'@'%'` grant, or attach an external MySQL and query it read-only |
@@ -109,6 +110,27 @@ Apps → New application:
 - **Files** button — open the file manager for `data/sites/<app>`: browse
   folders, edit text files, upload (8 MB), rename and delete. Downloads are
   authenticated by your panel session.
+
+## WordPress one-click install
+
+Pick the **WordPress** runtime and the panel does what a hosting control panel
+should: it creates a dedicated database (`wp_<app>`) and user on the panel's
+MySQL server, wires `WORDPRESS_DB_*` + HTTPS-behind-proxy config into the
+container, gives the site a URL (`https://domain` or `https://panel/<name>` when
+you leave the domain empty), then runs `wp core install` so the site is ready to
+log into — no `/wp-admin/install.php` wizard.
+
+You choose in the create dialog:
+
+- **Site title**
+- **Admin username**
+- **Admin password** (auto-generated, can be regenerated/shown)
+- **Admin email**
+
+Afterwards the app card shows the database name, user and password (with a
+copy button), a `wp-admin` link, and a **WP** button to run the installer again
+(for example after pointing the app at a new domain). Deleting the app drops its
+database and user too.
 
 ## Portability / migrating to another host
 

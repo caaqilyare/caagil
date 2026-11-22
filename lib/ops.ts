@@ -20,6 +20,7 @@ import {
   type TraefikRoute,
 } from "./docker";
 import { systemStats } from "./stats";
+import { dropAppDatabase, installWordPress, MYSQL_HOST, provisionAppDatabase, WP_PROXY_HTTPS, type WpInstallInput } from "./wp";
 import {
   detectPublicIp,
   EDGE_DIR,
@@ -51,6 +52,17 @@ export type AppRow = {
   notes: string | null;
   created_at: number;
   updated_at: number;
+};
+
+/** Database provisioned on the panel MySQL server for an app (WordPress etc.). */
+export type AppDbRow = {
+  id: string;
+  app_id: string;
+  name: string;
+  username: string;
+  password: string;
+  host: string;
+  created_at: number;
 };
 
 export type DatabaseRow = {
@@ -106,16 +118,17 @@ async function defaultRouteHost(): Promise<string | null> {
   }
 }
 
+const RESERVED_PATHS = new Set([
+  "api", "login", "logout", "apps", "databases", "domains", "activity",
+  "files", "ai", "settings", "targets", "_next", "favicon.ico",
+]);
+
 export function normalizePath(input: string): string {
   const path = input.trim().toLowerCase().replace(/\/+$/, "");
   if (!/^\/[a-z0-9][a-z0-9._-]{0,60}$/.test(path)) {
     throw new Error("Path must look like /name — a leading slash, letters, numbers, dot, dash or underscore.");
   }
-  const reserved = new Set([
-    "api", "login", "logout", "apps", "databases", "domains", "activity",
-    "files", "ai", "settings", "targets", "_next", "favicon.ico",
-  ]);
-  if (reserved.has(path.slice(1))) {
+  if (RESERVED_PATHS.has(path.slice(1))) {
     throw new Error(`"${path}" is reserved by the panel. Pick another path.`);
   }
   return path;
@@ -204,9 +217,20 @@ export type CreateAppInput = {
   stripPrefix?: boolean;
   env?: Record<string, string>;
   notes?: string;
+  /** WordPress one-click install options (WordPress runtime only). */
+  wp?: {
+    autoInstall?: boolean;
+    title?: string;
+    adminUser?: string;
+    adminPassword?: string;
+    adminEmail?: string;
+  };
 };
 
-export async function createApp(input: CreateAppInput, actor = "system"): Promise<AppRow> {
+export async function createApp(
+  input: CreateAppInput,
+  actor = "system",
+): Promise<AppRow & { wp_warning?: string | null }> {
   const name = slugify(input.name);
   const preset = findPreset(input.preset) ?? findPreset("php84")!;
   const image = (input.image || preset.image).trim();
@@ -235,6 +259,39 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
   const port = Number(input.port || preset.port);
   const env = { ...(preset.env ?? {}), ...(input.env ?? {}) };
 
+  // WordPress one-click: a managed database on the panel MySQL server plus
+  // reverse-proxy HTTPS detection — unless the user wired their own DB env.
+  const isWp = preset.id === "wordpress" || /wordpress/i.test(image);
+  const autoWp = isWp && input.wp?.autoInstall !== false;
+  let wpDb: Awaited<ReturnType<typeof provisionAppDatabase>> | null = null;
+  if (isWp && !env.WORDPRESS_DB_HOST) {
+    wpDb = await provisionAppDatabase(name);
+    env.WORDPRESS_DB_HOST = wpDb.host;
+    env.WORDPRESS_DB_NAME = wpDb.name;
+    env.WORDPRESS_DB_USER = wpDb.username;
+    env.WORDPRESS_DB_PASSWORD = wpDb.password;
+    if (!env.WORDPRESS_CONFIG_EXTRA) env.WORDPRESS_CONFIG_EXTRA = WP_PROXY_HTTPS;
+  }
+
+  // Path route: explicit from the user, or a default /<name> route so a
+  // WordPress app gets a working URL immediately.
+  let pathPrefix = input.pathPrefix ? normalizePath(input.pathPrefix) : null;
+  let pathHost = input.pathHost?.trim().toLowerCase() || null;
+  if (pathPrefix && !pathHost) pathHost = await defaultRouteHost();
+  if (autoWp && !primaryHost && !pathPrefix) {
+    const host = await defaultRouteHost();
+    if (host && !RESERVED_PATHS.has(name)) {
+      const clash = await one("SELECT id FROM apps WHERE path_prefix = ? AND path_host <=> ?", [
+        `/${name}`,
+        host,
+      ]);
+      if (!clash) {
+        pathPrefix = `/${name}`;
+        pathHost = host;
+      }
+    }
+  }
+
   await execute(
     `INSERT INTO apps (id, name, runtime, image, command, port, env, domain, git_url, branch, doc_root, mount_path, path_prefix, path_host, strip_prefix, php_version, status, notes, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -251,8 +308,8 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
       input.branch || null,
       preset.docRoot || null,
       preset.mountPath || null,
-      input.pathPrefix ? normalizePath(input.pathPrefix) : null,
-      input.pathHost?.trim().toLowerCase() || (input.pathPrefix ? await defaultRouteHost() : null),
+      pathPrefix,
+      pathHost,
       input.stripPrefix === false ? 0 : 1,
       preset.group === "php" ? (preset.id.match(/php(\d+)/)?.[1] ?? null) : null,
       "created",
@@ -272,11 +329,22 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
     ]);
   }
 
+  if (wpDb) {
+    await execute(
+      "INSERT INTO app_databases(id, app_id, name, username, password, host, created_at) VALUES(?,?,?,?,?,?,?)",
+      [randomId("wpdb"), id, wpDb.name, wpDb.username, wpDb.password, wpDb.host, now],
+    );
+  }
+
   const app = (await getApp(id))!;
   try {
     await applyApp(app);
   } catch (err) {
     // Roll back so a failed create does not leave a ghost app behind.
+    if (wpDb) {
+      await dropAppDatabase(wpDb.name, wpDb.username).catch(() => {});
+      await execute("DELETE FROM app_databases WHERE app_id = ?", [id]);
+    }
     await execute("DELETE FROM domains WHERE app_id = ?", [id]);
     await execute("DELETE FROM apps WHERE id = ?", [id]);
     await fs.rm(path.join(SITES_DIR, name), { recursive: true, force: true }).catch(() => {});
@@ -284,8 +352,34 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
     throw err;
   }
 
-  await logActivity("app.create", `${name} (${image}) on port ${port}`, actor);
-  return (await getApp(id))!;
+  let wpWarning: string | null = null;
+  if (autoWp) {
+    try {
+      const fresh = (await getApp(id))!;
+      const res = await installWordPress(fresh, {
+        title: input.wp?.title?.trim() || name,
+        adminUser: input.wp?.adminUser,
+        adminPassword: input.wp?.adminPassword,
+        adminEmail: input.wp?.adminEmail,
+      });
+      await logActivity("wp.install", `${name} → ${res.url} (admin: ${res.adminUser})`, actor);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      wpWarning = `WordPress auto-install failed: ${msg}`;
+      await execute(
+        "UPDATE apps SET notes = CONCAT(COALESCE(notes, ''), ?) WHERE id = ?",
+        [`${wpWarning} — press "WP" on the app card to retry.\n`, id],
+      );
+      await logActivity("wp.install", `${name}: ${msg}`, actor, false);
+    }
+  }
+
+  await logActivity(
+    "app.create",
+    `${name} (${image}) on port ${port}${pathPrefix && pathHost ? ` at ${pathHost}${pathPrefix}` : ""}`,
+    actor,
+  );
+  return { ...(await getApp(id))!, wp_warning: wpWarning };
 }
 
 /** Mount an app under a path prefix (e.g. https://panel.example.com/blog). */
@@ -343,6 +437,18 @@ export async function appAction(
     } catch (err) {
       warning = `container cleanup failed (${err instanceof Error ? err.message : String(err)})`;
     }
+    const wpDb = await one<AppDbRow>("SELECT * FROM app_databases WHERE app_id = ?", [app.id]);
+    if (wpDb) {
+      try {
+        await dropAppDatabase(wpDb.name, wpDb.username);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warning = warning
+          ? `${warning}; database cleanup failed (${msg})`
+          : `database cleanup failed (${msg})`;
+      }
+      await execute("DELETE FROM app_databases WHERE app_id = ?", [app.id]);
+    }
     await execute("DELETE FROM domains WHERE app_id = ?", [app.id]);
     await execute("DELETE FROM apps WHERE id = ?", [app.id]);
     await fs.rm(path.join(SITES_DIR, app.name), { recursive: true, force: true }).catch(() => {});
@@ -374,6 +480,24 @@ export async function appLogs(id: string, tail = 300): Promise<string> {
   const app = await getApp(id);
   if (!app?.container_id) throw new Error("App has no container yet.");
   return containerLogs(app.container_id, tail);
+}
+
+/* ────────────────── WordPress one-click installation ────────────────── */
+
+/** (Re)run the WordPress installer for an existing app. */
+export async function installWordPressForApp(
+  id: string,
+  input: WpInstallInput,
+  actor = "system",
+) {
+  const app = await getApp(id);
+  if (!app) throw new Error("App not found");
+  if (!/wordpress/i.test(`${app.runtime} ${app.image}`)) {
+    throw new Error("WP install only applies to WordPress apps.");
+  }
+  const res = await installWordPress(app, input);
+  await logActivity("wp.install", `${app.name} → ${res.url} (admin: ${res.adminUser})`, actor);
+  return { ok: true, url: res.url, adminUser: res.adminUser };
 }
 
 /* ──────────────────────────── databases ─────────────────────────── */
@@ -877,18 +1001,25 @@ export async function savePanelAccess(input: PanelAccessInput, actor = "system")
 /* ──────────────────────────── overview ─────────────────────────── */
 
 export async function overview() {
-  const [apps, databases, domains, targets, activity, stats, publicIp, edge] = await Promise.all([
-    listApps(),
-    listDatabases(),
-    listDomains(),
-    listTargets(),
-    query<{ id: number; ts: number; actor: string; action: string; detail: string; ok: number }[]>(
-      "SELECT * FROM activity ORDER BY id DESC LIMIT 25",
-    ),
-    systemStats(),
-    getSetting("public_ip"),
-    panelEdgeSettings(),
-  ]);
+  const [appRows, wpDbs, databases, domains, targets, activity, stats, publicIp, edge] =
+    await Promise.all([
+      listApps(),
+      query<AppDbRow[]>("SELECT * FROM app_databases"),
+      listDatabases(),
+      listDomains(),
+      listTargets(),
+      query<{ id: number; ts: number; actor: string; action: string; detail: string; ok: number }[]>(
+        "SELECT * FROM activity ORDER BY id DESC LIMIT 25",
+      ),
+      systemStats(),
+      getSetting("public_ip"),
+      panelEdgeSettings(),
+    ]);
+
+  const apps = appRows.map((app) => ({
+    ...app,
+    wp_db: wpDbs.find((db) => db.app_id === app.id) ?? null,
+  }));
 
   return {
     apps,

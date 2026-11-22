@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { AppRow, DatabaseRow, TargetRow } from "@/lib/ops";
+import type { AppDbRow, AppRow, DatabaseRow, TargetRow } from "@/lib/ops";
 import type { SystemStats } from "@/lib/stats";
 import type { DbEngine, RuntimePreset } from "@/lib/presets";
 
@@ -25,7 +25,7 @@ export type ActivityRow = {
 
 export type PanelState = {
   user: { id: string; email: string; role: string };
-  apps: AppRow[];
+  apps: (AppRow & { wp_db?: AppDbRow | null })[];
   databases: DatabaseRow[];
   domains: DomainRow[];
   targets: TargetRow[];

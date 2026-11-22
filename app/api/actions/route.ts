@@ -31,6 +31,18 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
   const s = (k: string) => String(p[k] ?? "");
   const n = (k: string) => Number(p[k]);
 
+  const wpOptions = (raw: unknown) => {
+    if (!raw || typeof raw !== "object") return undefined;
+    const w = raw as Record<string, unknown>;
+    return {
+      autoInstall: w.autoInstall !== false,
+      title: w.title ? String(w.title) : undefined,
+      adminUser: w.adminUser ? String(w.adminUser) : undefined,
+      adminPassword: w.adminPassword ? String(w.adminPassword) : undefined,
+      adminEmail: w.adminEmail ? String(w.adminEmail) : undefined,
+    };
+  };
+
   switch (action) {
     /* apps */
     case "app.create":
@@ -49,6 +61,7 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
           stripPrefix: p.stripPrefix !== false,
           notes: p.notes ? s("notes") : undefined,
           env: (p.env as Record<string, string>) ?? {},
+          wp: wpOptions(p.wp),
         },
         actor,
       );
@@ -59,6 +72,17 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       return ops.appAction(s("name"), action.split(".")[1] as "start" | "stop" | "restart" | "delete", actor);
     case "app.redeploy":
       return ops.redeployApp(s("name"), actor);
+    case "app.wpinstall":
+      return ops.installWordPressForApp(
+        s("name"),
+        {
+          title: p.title ? s("title") : undefined,
+          adminUser: p.adminUser ? s("adminUser") : undefined,
+          adminPassword: p.adminPassword ? s("adminPassword") : undefined,
+          adminEmail: p.adminEmail ? s("adminEmail") : undefined,
+        },
+        actor,
+      );
     case "app.route":
       return ops.setAppRoute(
         s("name"),
