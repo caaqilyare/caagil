@@ -4,6 +4,8 @@
  */
 import { PassThrough } from "node:stream";
 import type { Readable } from "node:stream";
+import fs from "node:fs/promises";
+import path from "node:path";
 import Docker from "dockerode";
 import { containerLogs, docker, HOST_SITES_DIR, NETWORK, pullIfMissing } from "./docker";
 import { randomId, shortPassword } from "./crypto";
@@ -132,6 +134,24 @@ export function siteUrlFor(app: {
   return null;
 }
 
+/** Ensure wp-config.php carries the path-prefix aware snippet even for
+ * installs created before this fix (wp-config.php is written once and persists). */
+async function ensureWpConfigPrefix(appName: string, prefix: string | null): Promise<void> {
+  const wpConfig = path.join(HOST_SITES_DIR, appName, "wp-config.php");
+  let cfg: string;
+  try {
+    cfg = await fs.readFile(wpConfig, "utf8");
+  } catch {
+    return; // no wp-config yet — the container entrypoint will write it from env
+  }
+  if (cfg.includes("HTTP_X_FORWARDED_PREFIX")) return; // already patched
+  const snippet =
+    `if (isset($_SERVER['HTTP_X_FORWARDED_PREFIX']) && strpos($_SERVER['HTTP_X_FORWARDED_PREFIX'], '${prefix}') === 0) {` +
+    ` $_SERVER['REQUEST_URI'] = $_SERVER['HTTP_X_FORWARDED_PREFIX'] . $_SERVER['REQUEST_URI']; }`;
+  const body = cfg.replace(/\?>\s*$/, (m) => snippet + "\n?>\n");
+  await fs.writeFile(wpConfig, body);
+}
+
 export type WpInstallInput = {
   url?: string;
   title?: string;
@@ -205,6 +225,12 @@ export async function installWordPress(
       "No URL for this app yet. Attach a domain or path route first, then run WP install again.",
     );
   }
+
+  // Older installs (and installs created before the X-Forwarded-Prefix fix)
+  // keep a wp-config.php without the path-prefix snippet — patch it in so
+  // wp-admin behind a path route keeps the prefix.
+  const wpPrefix = app.path_prefix ? (app.path_prefix.startsWith("/") ? app.path_prefix : `/${app.path_prefix}`) : null;
+  if (wpPrefix) await ensureWpConfigPrefix(app.name, wpPrefix);
 
   const title = input.title?.trim() || app.name;
   const adminUser = (input.adminUser?.trim() || "admin").replace(/[^a-zA-Z0-9_.@-]/g, "") || "admin";
