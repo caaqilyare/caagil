@@ -71,20 +71,36 @@ export async function runMysqlSql(sql: string): Promise<string> {
 
 export type AppDbInfo = { name: string; username: string; password: string; host: string };
 
-/** Create a dedicated database + user for an app on the panel MySQL server. */
-export async function provisionAppDatabase(appName: string): Promise<AppDbInfo> {
-  const ident = appName.replace(/-/g, "_");
-  const db = `wp_${ident}`.slice(0, 64);
-  const user = `wp_${ident}`.slice(0, 26);
-  const password = shortPassword(24);
+/** Create a dedicated database for an app on the panel MySQL server. */
+export async function createAppDatabase(appName: string): Promise<{ name: string }> {
+  const db = `wp_${appName.replace(/-/g, "_")}`.slice(0, 64);
   await runMysqlSql(
-    `CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;` +
-      `CREATE USER IF NOT EXISTS '${user}'@'%' IDENTIFIED BY '${password}';` +
-      `ALTER USER '${user}'@'%' IDENTIFIED BY '${password}';` +
-      `GRANT ALL PRIVILEGES ON \`${db}\`.* TO '${user}'@'%';` +
+    `CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+  );
+  return { name: db };
+}
+
+/** Create the matching user and grant it full rights on the app's database. */
+export async function createAppDatabaseUser(
+  appName: string,
+  password?: string,
+): Promise<{ username: string; password: string }> {
+  const user = `wp_${appName.replace(/-/g, "_")}`.slice(0, 26);
+  const pass = password || shortPassword(24);
+  await runMysqlSql(
+    `CREATE USER IF NOT EXISTS '${user}'@'%' IDENTIFIED BY '${pass}';` +
+      `ALTER USER '${user}'@'%' IDENTIFIED BY '${pass}';` +
+      `GRANT ALL PRIVILEGES ON \`wp_${appName.replace(/-/g, "_")}\`.* TO '${user}'@'%';` +
       `FLUSH PRIVILEGES;`,
   );
-  return { name: db, username: user, password, host: MYSQL_HOST };
+  return { username: user, password: pass };
+}
+
+/** Database + user in one call. */
+export async function provisionAppDatabase(appName: string): Promise<AppDbInfo> {
+  const { name } = await createAppDatabase(appName);
+  const { username, password } = await createAppDatabaseUser(appName);
+  return { name, username, password, host: MYSQL_HOST };
 }
 
 /** Drop a managed database and its user (used when an app is deleted). */

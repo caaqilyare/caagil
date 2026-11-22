@@ -46,7 +46,7 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
   switch (action) {
     /* apps */
     case "app.create":
-      return ops.createApp(
+      return ops.startAppCreate(
         {
           name: s("name"),
           preset: s("preset") || "php84",
@@ -73,7 +73,7 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
     case "app.redeploy":
       return ops.redeployApp(s("name"), actor);
     case "app.wpinstall":
-      return ops.installWordPressForApp(
+      return ops.startWpInstall(
         s("name"),
         {
           title: p.title ? s("title") : undefined,

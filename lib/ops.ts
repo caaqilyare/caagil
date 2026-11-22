@@ -20,7 +20,16 @@ import {
   type TraefikRoute,
 } from "./docker";
 import { systemStats } from "./stats";
-import { dropAppDatabase, installWordPress, MYSQL_HOST, provisionAppDatabase, WP_PROXY_HTTPS, type WpInstallInput } from "./wp";
+import { createJob, jobFail, jobFinish, jobStep } from "./jobs";
+import {
+  createAppDatabase,
+  createAppDatabaseUser,
+  dropAppDatabase,
+  installWordPress,
+  MYSQL_HOST,
+  WP_PROXY_HTTPS,
+  type WpInstallInput,
+} from "./wp";
 import {
   detectPublicIp,
   EDGE_DIR,
@@ -227,10 +236,19 @@ export type CreateAppInput = {
   };
 };
 
+/** Reports deploy progress so the UI can render a live step-by-step screen. */
+export type ProgressReporter = (
+  step: string,
+  status: "active" | "done" | "error",
+  detail?: string,
+) => void;
+
 export async function createApp(
   input: CreateAppInput,
   actor = "system",
+  report?: ProgressReporter,
 ): Promise<AppRow & { wp_warning?: string | null }> {
+  report?.("validate", "active");
   const name = slugify(input.name);
   const preset = findPreset(input.preset) ?? findPreset("php84")!;
   const image = (input.image || preset.image).trim();
@@ -251,8 +269,13 @@ export async function createApp(
       );
     }
   }
+  report?.("validate", "done");
 
-  if (input.gitUrl) await cloneOrPull(input.gitUrl, input.branch || null, name);
+  if (input.gitUrl) {
+    report?.("clone", "active", input.gitUrl);
+    await cloneOrPull(input.gitUrl, input.branch || null, name);
+    report?.("clone", "done", input.branch || "main");
+  }
 
   const id = randomId("app");
   const now = Date.now();
@@ -263,9 +286,15 @@ export async function createApp(
   // reverse-proxy HTTPS detection — unless the user wired their own DB env.
   const isWp = preset.id === "wordpress" || /wordpress/i.test(image);
   const autoWp = isWp && input.wp?.autoInstall !== false;
-  let wpDb: Awaited<ReturnType<typeof provisionAppDatabase>> | null = null;
+  let wpDb: { name: string; username: string; password: string; host: string } | null = null;
   if (isWp && !env.WORDPRESS_DB_HOST) {
-    wpDb = await provisionAppDatabase(name);
+    report?.("database", "active");
+    const dbName = (await createAppDatabase(name)).name;
+    report?.("database", "done", dbName);
+    report?.("dbuser", "active");
+    const { username, password } = await createAppDatabaseUser(name);
+    report?.("dbuser", "done", username);
+    wpDb = { name: dbName, username, password, host: MYSQL_HOST };
     env.WORDPRESS_DB_HOST = wpDb.host;
     env.WORDPRESS_DB_NAME = wpDb.name;
     env.WORDPRESS_DB_USER = wpDb.username;
@@ -292,6 +321,11 @@ export async function createApp(
     }
   }
 
+  report?.("pull", "active", image);
+  await pullIfMissing(image);
+  report?.("pull", "done");
+
+  report?.("container", "active");
   await execute(
     `INSERT INTO apps (id, name, runtime, image, command, port, env, domain, git_url, branch, doc_root, mount_path, path_prefix, path_host, strip_prefix, php_version, status, notes, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -341,6 +375,7 @@ export async function createApp(
     await applyApp(app);
   } catch (err) {
     // Roll back so a failed create does not leave a ghost app behind.
+    report?.("container", "error", err instanceof Error ? err.message : String(err));
     if (wpDb) {
       await dropAppDatabase(wpDb.name, wpDb.username).catch(() => {});
       await execute("DELETE FROM app_databases WHERE app_id = ?", [id]);
@@ -351,9 +386,11 @@ export async function createApp(
     await logActivity("app.create", `${name}: ${err instanceof Error ? err.message : err}`, actor, false);
     throw err;
   }
+  report?.("container", "done", `caagil-${name}`);
 
   let wpWarning: string | null = null;
   if (autoWp) {
+    report?.("wp", "active", "waiting for WordPress to initialize…");
     try {
       const fresh = (await getApp(id))!;
       const res = await installWordPress(fresh, {
@@ -362,10 +399,12 @@ export async function createApp(
         adminPassword: input.wp?.adminPassword,
         adminEmail: input.wp?.adminEmail,
       });
+      report?.("wp", "done", res.url);
       await logActivity("wp.install", `${name} → ${res.url} (admin: ${res.adminUser})`, actor);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       wpWarning = `WordPress auto-install failed: ${msg}`;
+      report?.("wp", "error", msg);
       await execute(
         "UPDATE apps SET notes = CONCAT(COALESCE(notes, ''), ?) WHERE id = ?",
         [`${wpWarning} — press "WP" on the app card to retry.\n`, id],
@@ -380,6 +419,88 @@ export async function createApp(
     actor,
   );
   return { ...(await getApp(id))!, wp_warning: wpWarning };
+}
+
+/**
+ * Job-wrapped create used by the UI: validates cheap things synchronously,
+ * then runs the deploy in the background while the client polls /api/jobs/<id>
+ * for live step-by-step progress.
+ */
+export async function startAppCreate(
+  input: CreateAppInput,
+  actor = "system",
+): Promise<{ job: string }> {
+  const name = slugify(input.name);
+  if (await one("SELECT id FROM apps WHERE name = ?", [name])) {
+    throw new Error(`An app named "${name}" already exists.`);
+  }
+  const preset = findPreset(input.preset) ?? findPreset("php84")!;
+  const isWp = preset.id === "wordpress" || /wordpress/i.test(input.image || preset.image);
+
+  const steps: { key: string; label: string }[] = [
+    { key: "validate", label: "Checking name & settings" },
+  ];
+  if (input.gitUrl) steps.push({ key: "clone", label: "Cloning Git repository" });
+  if (isWp && !input.env?.WORDPRESS_DB_HOST) {
+    steps.push({ key: "database", label: "Creating MySQL database" });
+    steps.push({ key: "dbuser", label: "Creating database user" });
+  }
+  steps.push({ key: "pull", label: "Pulling Docker image" });
+  steps.push({ key: "container", label: "Starting container & routing" });
+  if (isWp && input.wp?.autoInstall !== false) {
+    steps.push({ key: "wp", label: "Installing WordPress" });
+  }
+
+  const jobId = createJob("app.create", `Deploy ${name}`, steps);
+  void (async () => {
+    try {
+      const app = await createApp(input, actor, (key, status, detail) =>
+        jobStep(jobId, key, status, detail),
+      );
+      jobFinish(jobId, { name: app.name, wp_warning: app.wp_warning ?? null });
+    } catch (err) {
+      jobFail(jobId, err instanceof Error ? err.message : String(err));
+    }
+  })();
+
+  return { job: jobId };
+}
+
+/** Job-wrapped WordPress install for the UI (same polling contract). */
+export async function startWpInstall(
+  id: string,
+  input: WpInstallInput,
+  actor = "system",
+): Promise<{ job: string }> {
+  const app = await getApp(id);
+  if (!app) throw new Error("App not found");
+  if (!/wordpress/i.test(`${app.runtime} ${app.image}`)) {
+    throw new Error("WP install only applies to WordPress apps.");
+  }
+
+  const jobId = createJob("app.wpinstall", `Install WordPress · ${app.name}`, [
+    { key: "connect", label: "Checking app container" },
+    { key: "wp", label: "Running the WordPress installer" },
+  ]);
+
+  void (async () => {
+    try {
+      jobStep(jobId, "connect", "active");
+      const fresh = (await getApp(app.id))!;
+      jobStep(jobId, "connect", "done", fresh.status);
+      jobStep(jobId, "wp", "active", "wp-cli is working…");
+      const res = await installWordPress(fresh, input);
+      jobStep(jobId, "wp", "done", res.url);
+      await logActivity("wp.install", `${app.name} → ${res.url} (admin: ${res.adminUser})`, actor);
+      jobFinish(jobId, { url: res.url, adminUser: res.adminUser });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await logActivity("wp.install", `${app.name}: ${msg}`, actor, false).catch(() => {});
+      jobFail(jobId, msg);
+    }
+  })();
+
+  return { job: jobId };
 }
 
 /** Mount an app under a path prefix (e.g. https://panel.example.com/blog). */

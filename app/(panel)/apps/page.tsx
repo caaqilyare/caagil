@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import {
+  ArrowLeft,
+  ArrowRight,
   Boxes,
   Check,
   Copy,
@@ -12,6 +14,7 @@ import {
   FileCode2,
   FolderOpen,
   GitBranch,
+  Github,
   Globe,
   KeyRound,
   Link2,
@@ -24,6 +27,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/shell";
 import { FileManager } from "@/components/file-manager";
+import { JobProgress, useJob } from "@/components/deploy-progress";
 import {
   Badge,
   Button,
@@ -282,8 +286,7 @@ export default function AppsPage() {
         hosts={knownHosts}
         userEmail={state?.user.email ?? ""}
         onCreate={async (payload) => {
-          await act("app.create", payload);
-          setOpen(false);
+          return act<{ job?: string }>("app.create", payload);
         }}
       />
 
@@ -343,6 +346,51 @@ export default function AppsPage() {
   );
 }
 
+function WizardSteps({ current }: { current: number }) {
+  const labels = ["Source", "Configure", "Deploy"];
+  return (
+    <div className="mb-5 flex items-center">
+      {labels.map((label, i) => {
+        const n = i + 1;
+        const state = n < current ? "done" : n === current ? "active" : "todo";
+        return (
+          <div key={label} className="contents">
+            {i > 0 && (
+              <div
+                className={`mx-2 h-px flex-1 transition-colors ${
+                  n <= current ? "bg-brand-500/50" : "bg-white/10"
+                }`}
+              />
+            )}
+            <div
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${
+                state === "active"
+                  ? "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/40"
+                  : state === "done"
+                    ? "text-emerald-400"
+                    : "text-slate-500"
+              }`}
+            >
+              <span
+                className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] font-bold ${
+                  state === "active"
+                    ? "bg-brand-500 text-ink-950"
+                    : state === "done"
+                      ? "bg-emerald-500/20"
+                      : "bg-white/5"
+                }`}
+              >
+                {state === "done" ? <Check size={10} /> : n}
+              </span>
+              {label}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CreateAppModal({
   open,
   onClose,
@@ -356,10 +404,12 @@ function CreateAppModal({
   presets: RuntimePreset[];
   hosts: string[];
   userEmail: string;
-  onCreate: (payload: Record<string, unknown>) => Promise<{ wp_warning?: string | null } | void>;
+  onCreate: (payload: Record<string, unknown>) => Promise<{ job?: string } | void>;
 }) {
+  const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [presetId, setPresetId] = useState("php84");
+  const [source, setSource] = useState<"fresh" | "git">("fresh");
   const [gitUrl, setGitUrl] = useState("");
   const [branch, setBranch] = useState("main");
   const [domain, setDomain] = useState("");
@@ -371,7 +421,6 @@ function CreateAppModal({
   const [envText, setEnvText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
 
   const [wpAuto, setWpAuto] = useState(true);
   const [wpTitle, setWpTitle] = useState("");
@@ -380,23 +429,64 @@ function CreateAppModal({
   const [wpShowPass, setWpShowPass] = useState(false);
   const [wpEmail, setWpEmail] = useState(userEmail);
 
-  const preset = presets.find((p) => p.id === presetId);
-  const isCustom = presetId === "custom";
-  const isWp = presetId === "wordpress";
+  const [jobId, setJobId] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  const preset = presets.find((p) => p.id === presetId);
+  const isWp = presetId === "wordpress";
+  const isCustom = presetId === "custom";
+
+  const job = useJob(jobId);
+  const jobDone = job?.status === "done";
+  const jobFailed = job?.status === "error";
+
+  const siteUrl = name
+    ? domain
+      ? `https://${domain}`
+      : pathPrefix
+        ? `https://${pathHost || hosts[0] || "<panel-domain>"}/${pathPrefix.replace(/^\//, "")}`
+        : isWp && wpAuto
+          ? `https://${hosts[0] || "<panel-domain>"}/${name}`
+          : null
+    : null;
+
+  function reset() {
+    setStep(1);
+    setName("");
+    setGitUrl("");
+    setDomain("");
+    setPathPrefix("");
+    setPathHost("");
+    setEnvText("");
+    setWpPass(generatePassword());
+    setJobId(null);
+    setError(null);
+  }
+
+  function close() {
+    reset();
+    onClose();
+  }
+
+  function nextFrom1() {
+    setError(null);
+    if (!name.trim()) return setError("Give the app a name first.");
+    if (isCustom && !image.trim())
+      return setError("A Docker image is required for the custom runtime.");
+    if (source === "git" && !gitUrl.trim()) return setError("Enter the Git repository URL.");
+    setStep(2);
+  }
+
+  async function deploy() {
     setBusy(true);
     setError(null);
-    setWarning(null);
     try {
       const res = await onCreate({
         name,
         preset: presetId,
         image: isCustom ? image : undefined,
         port: port ? Number(port) : undefined,
-        gitUrl: gitUrl || undefined,
-        branch: gitUrl ? branch : undefined,
+        gitUrl: source === "git" ? gitUrl : undefined,
+        branch: source === "git" ? branch : undefined,
         domain: domain || undefined,
         pathPrefix: pathPrefix || undefined,
         pathHost: pathHost || undefined,
@@ -412,18 +502,7 @@ function CreateAppModal({
             }
           : undefined,
       });
-      if (res?.wp_warning) {
-        setWarning(res.wp_warning);
-      } else {
-        setName("");
-        setGitUrl("");
-        setDomain("");
-        setPathPrefix("");
-        setPathHost("");
-        setEnvText("");
-        setWpPass(generatePassword());
-        onClose();
-      }
+      if (res?.job) setJobId(res.job);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -431,236 +510,405 @@ function CreateAppModal({
     }
   }
 
+  const jobResult = (job?.result ?? {}) as { name?: string; wp_warning?: string | null };
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
-      title="New application"
-      description="A container, a Traefik route and an optional SSL certificate — all wired automatically."
+      onClose={close}
+      title={jobId && !jobFailed ? "Deploying…" : "New application"}
+      description={
+        jobId
+          ? jobDone
+            ? undefined
+            : "You can close this — the deploy keeps running in the background."
+          : "A container, a database and an SSL certificate — wired automatically."
+      }
       wide
     >
-      <form onSubmit={submit} className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name" hint="Lowercase letters, numbers and dashes.">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-blog" required />
-          </Field>
-          <Field label="Runtime">
-            <Select value={presetId} onChange={(e) => setPresetId(e.target.value)}>
-              {presets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+      {!jobId && <WizardSteps current={step} />}
 
-        {preset && <p className="text-[11px] leading-relaxed text-slate-500">{preset.description}</p>}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Git repository" hint="Optional. Public or private over SSH keys on the server.">
-            <Input
-              value={gitUrl}
-              onChange={(e) => setGitUrl(e.target.value)}
-              placeholder="https://github.com/you/site.git"
-            />
-          </Field>
-          <Field label="Branch">
-            <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
-          </Field>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Domain"
-            hint="Pick an existing domain or type a new one. Traefik requests the certificate automatically."
-          >
-            <Input
-              list="caagil-domain-options"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="app.example.com"
-            />
-          </Field>
-          <Field label="Container port" hint={preset ? `Preset default: ${preset.port}` : undefined}>
-            <Input
-              type="number"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-              placeholder={String(preset?.port ?? 80)}
-            />
-          </Field>
-        </div>
-
-        <datalist id="caagil-domain-options">
-          {hosts.map((host) => (
-            <option key={host} value={host} />
-          ))}
-        </datalist>
-
-        <div className="rounded-xl border border-white/5 bg-ink-950/50 p-3">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            <Link2 size={12} /> Path route (optional)
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Path" hint="Serve the app at https://host/path, e.g. /blog.">
-              <Input value={pathPrefix} onChange={(e) => setPathPrefix(e.target.value)} placeholder="/blog" />
-            </Field>
-            <Field label="Host" hint="Defaults to this panel's domain.">
-              <Input
-                list="caagil-domain-options"
-                value={pathHost}
-                onChange={(e) => setPathHost(e.target.value)}
-                placeholder="panel.example.com"
-              />
-            </Field>
-          </div>
-          {pathPrefix && (
-            <p className="mt-2 rounded-lg bg-ink-950/60 px-3 py-2 text-[11px] text-slate-400">
-              <Link2 size={11} className="mr-1 inline" />
-              https://{pathHost || hosts[0] || "<panel-domain>"}
-              {pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`}
+      {jobId ? (
+        <JobProgress
+          job={job}
+          onBack={job?.status === "error" ? () => { setJobId(null); setStep(2); } : undefined}
+          backLabel="Back to settings"
+        >
+          <div className="space-y-2 rounded-xl border border-white/5 bg-ink-950/40 p-3 text-xs text-slate-300">
+            <p>
+              <span className="text-slate-500">App</span> <Code>{jobResult.name ?? name}</Code>
+              <span className="mx-2 text-slate-600">·</span>
+              <span className="text-slate-500">Files</span> <Code>data/sites/{jobResult.name ?? name}</Code>
             </p>
-          )}
-          <label className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-            <input
-              type="checkbox"
-              checked={stripPrefix}
-              onChange={(e) => setStripPrefix(e.target.checked)}
-              className="h-3.5 w-3.5 accent-brand-500"
-            />
-            Strip the path prefix before proxying
-          </label>
-        </div>
-
-        {isWp && (
-          <div className="space-y-3 rounded-xl border border-brand-500/25 bg-brand-500/5 p-3">
-            <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-brand-300">
-              <KeyRound size={12} /> WordPress one-click install
-            </p>
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <input
-                type="checkbox"
-                checked={wpAuto}
-                onChange={(e) => setWpAuto(e.target.checked)}
-                className="h-3.5 w-3.5 accent-brand-500"
-              />
-              Auto-install with its own MySQL database, admin account and SSL URL (recommended)
-            </label>
-            {wpAuto && (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Site title">
-                    <Input
-                      value={wpTitle}
-                      onChange={(e) => setWpTitle(e.target.value)}
-                      placeholder={name || "My WordPress site"}
-                    />
-                  </Field>
-                  <Field label="Admin username">
-                    <Input value={wpUser} onChange={(e) => setWpUser(e.target.value)} placeholder="admin" />
-                  </Field>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Admin password" hint="Copy it now — you need it to log in to wp-admin.">
-                    <div className="flex gap-1.5">
-                      <Input
-                        type={wpShowPass ? "text" : "password"}
-                        value={wpPass}
-                        onChange={(e) => setWpPass(e.target.value)}
-                        className="font-mono"
-                      />
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setWpPass(generatePassword())}>
-                        <RefreshCw size={13} />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setWpShowPass((v) => !v)}
-                      >
-                        {wpShowPass ? <EyeOff size={13} /> : <Eye size={13} />}
-                      </Button>
-                    </div>
-                  </Field>
-                  <Field label="Admin email">
-                    <Input
-                      type="email"
-                      value={wpEmail}
-                      onChange={(e) => setWpEmail(e.target.value)}
-                      placeholder={userEmail || "you@example.com"}
-                    />
-                  </Field>
-                </div>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  A database <Code>wp_{name || "&lt;name&gt;"}</Code> is created on the panel MySQL
-                  server. If you do not pick a domain or path, the site is served at{" "}
-                  <Code>
-                    {hosts[0] || "&lt;panel-domain&gt;"}/{name || "&lt;name&gt;"}
-                  </Code>
-                  . The install finishes about a minute after the container starts.
-                </p>
-              </>
+            {siteUrl && (
+              <a
+                href={siteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-brand-400 hover:underline"
+              >
+                {siteUrl} <ExternalLink size={12} />
+              </a>
+            )}
+            {isWp && wpAuto && siteUrl && (
+              <a
+                href={`${siteUrl}/wp-admin`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-amber-300 hover:underline"
+              >
+                <KeyRound size={12} /> Open wp-admin — user {wpUser || "admin"}, the password you
+                copied on the Deploy step
+              </a>
+            )}
+            {jobResult.wp_warning && (
+              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-300">
+                {jobResult.wp_warning}
+              </p>
             )}
           </div>
-        )}
-
-        {isCustom && (
-          <Field label="Docker image" hint="Any image that listens on the port above.">
-            <Input value={image} onChange={(e) => setImage(e.target.value)} placeholder="ghcr.io/you/app:latest" />
-          </Field>
-        )}
-
-        <Field
-          label="Environment variables"
-          hint="One KEY=VALUE per line. For MySQL use DB_HOST=db-<name>, DB_PORT=3306, DB_DATABASE, DB_USERNAME, DB_PASSWORD."
-        >
-          <Textarea
-            value={envText}
-            onChange={(e) => setEnvText(e.target.value)}
-            className="font-mono text-xs"
-            placeholder={"APP_ENV=production\nDB_HOST=db-main"}
-          />
-        </Field>
-
-        {error && (
-          <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            {error}
-          </p>
-        )}
-
-        {warning && (
-          <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            <p>{warning}</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="mt-1"
-              onClick={() => {
-                setWarning(null);
-                onClose();
-              }}
-            >
-              Close
+          <div className="flex justify-end gap-2 pt-1">
+            <Button size="sm" onClick={close}>
+              Done
             </Button>
           </div>
-        )}
+        </JobProgress>
+      ) : step === 1 ? (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Name" hint="Lowercase letters, numbers and dashes.">
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-blog" />
+            </Field>
+            <Field label="Runtime">
+              <Select value={presetId} onChange={(e) => setPresetId(e.target.value)}>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <Copy size={12} /> Files live in <Code>data/sites/{name || "<name>"}</Code>
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-              Cancel
+          {preset && <p className="text-[11px] leading-relaxed text-slate-500">{preset.description}</p>}
+
+          <Field label="Source">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setSource("fresh")}
+                className={`rounded-xl border p-3 text-left transition-all ${
+                  source === "fresh"
+                    ? "border-brand-500/50 bg-brand-500/10 shadow-glow"
+                    : "border-white/10 bg-ink-950/40 hover:border-white/25"
+                }`}
+              >
+                <span className="flex items-center gap-2 text-xs font-semibold text-white">
+                  <Boxes size={15} className={source === "fresh" ? "text-brand-400" : "text-slate-400"} />
+                  Fresh start
+                </span>
+                <span className="mt-1 block text-[11px] leading-relaxed text-slate-500">
+                  Empty runtime — add files later with the file manager.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSource("git")}
+                className={`rounded-xl border p-3 text-left transition-all ${
+                  source === "git"
+                    ? "border-brand-500/50 bg-brand-500/10 shadow-glow"
+                    : "border-white/10 bg-ink-950/40 hover:border-white/25"
+                }`}
+              >
+                <span className="flex items-center gap-2 text-xs font-semibold text-white">
+                  <Github size={15} className={source === "git" ? "text-brand-400" : "text-slate-400"} />
+                  GitHub repository
+                </span>
+                <span className="mt-1 block text-[11px] leading-relaxed text-slate-500">
+                  Clone on first install — public or private over the server&apos;s SSH keys.
+                </span>
+              </button>
+            </div>
+          </Field>
+
+          {source === "git" && (
+            <div className="grid animate-fade-up gap-3 sm:grid-cols-[2fr_1fr]">
+              <Field label="Repository URL" hint="HTTPS, e.g. https://github.com/you/site.git">
+                <Input
+                  value={gitUrl}
+                  onChange={(e) => setGitUrl(e.target.value)}
+                  placeholder="https://github.com/you/site.git"
+                />
+              </Field>
+              <Field label="Branch">
+                <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+              </Field>
+            </div>
+          )}
+
+          {isCustom && (
+            <Field label="Docker image" hint="Any image that listens on the container port.">
+              <Input value={image} onChange={(e) => setImage(e.target.value)} placeholder="ghcr.io/you/app:latest" />
+            </Field>
+          )}
+
+          {error && (
+            <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {error}
+            </p>
+          )}
+
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <Copy size={12} /> Files live in <Code>data/sites/{name || "<name>"}</Code>
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={close}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={nextFrom1}>
+                Continue <ArrowRight size={13} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : step === 2 ? (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Domain"
+              hint="Pick an existing domain or type a new one. The certificate is automatic."
+            >
+              <Input
+                list="caagil-domain-options"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="app.example.com"
+              />
+            </Field>
+            <Field label="Container port" hint={preset ? `Preset default: ${preset.port}` : undefined}>
+              <Input
+                type="number"
+                value={port}
+                onChange={(e) => setPort(e.target.value)}
+                placeholder={String(preset?.port ?? 80)}
+              />
+            </Field>
+          </div>
+
+          <datalist id="caagil-domain-options">
+            {hosts.map((host) => (
+              <option key={host} value={host} />
+            ))}
+          </datalist>
+
+          <div className="rounded-xl border border-white/5 bg-ink-950/50 p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              <Link2 size={12} /> Path route (optional)
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Path" hint="Serve the app at https://host/path, e.g. /blog.">
+                <Input value={pathPrefix} onChange={(e) => setPathPrefix(e.target.value)} placeholder="/blog" />
+              </Field>
+              <Field label="Host" hint="Defaults to this panel's domain.">
+                <Input
+                  list="caagil-domain-options"
+                  value={pathHost}
+                  onChange={(e) => setPathHost(e.target.value)}
+                  placeholder="panel.example.com"
+                />
+              </Field>
+            </div>
+            {pathPrefix && (
+              <p className="mt-2 rounded-lg bg-ink-950/60 px-3 py-2 text-[11px] text-slate-400">
+                <Link2 size={11} className="mr-1 inline" />
+                https://{pathHost || hosts[0] || "<panel-domain>"}
+                {pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`}
+              </p>
+            )}
+            <label className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+              <input
+                type="checkbox"
+                checked={stripPrefix}
+                onChange={(e) => setStripPrefix(e.target.checked)}
+                className="h-3.5 w-3.5 accent-brand-500"
+              />
+              Strip the path prefix before proxying
+            </label>
+          </div>
+
+          {isWp && (
+            <div className="space-y-3 rounded-xl border border-brand-500/25 bg-brand-500/5 p-3">
+              <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-brand-300">
+                <KeyRound size={12} /> WordPress one-click install
+              </p>
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={wpAuto}
+                  onChange={(e) => setWpAuto(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-brand-500"
+                />
+                Auto-install with its own MySQL database, admin account and SSL URL (recommended)
+              </label>
+              {wpAuto && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Site title">
+                      <Input
+                        value={wpTitle}
+                        onChange={(e) => setWpTitle(e.target.value)}
+                        placeholder={name || "My WordPress site"}
+                      />
+                    </Field>
+                    <Field label="Admin username">
+                      <Input value={wpUser} onChange={(e) => setWpUser(e.target.value)} placeholder="admin" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Admin password" hint="You will confirm it on the Deploy step.">
+                      <div className="flex gap-1.5">
+                        <Input
+                          type={wpShowPass ? "text" : "password"}
+                          value={wpPass}
+                          onChange={(e) => setWpPass(e.target.value)}
+                          className="font-mono"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setWpPass(generatePassword())}
+                        >
+                          <RefreshCw size={13} />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setWpShowPass((v) => !v)}
+                        >
+                          {wpShowPass ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </Button>
+                      </div>
+                    </Field>
+                    <Field label="Admin email">
+                      <Input
+                        type="email"
+                        value={wpEmail}
+                        onChange={(e) => setWpEmail(e.target.value)}
+                        placeholder={userEmail || "you@example.com"}
+                      />
+                    </Field>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-slate-500">
+                    A database <Code>wp_{name || "<name>"}</Code> is created on the panel MySQL
+                    server. Leave the domain and path empty and the site is served at{" "}
+                    <Code>
+                      {hosts[0] || "<panel-domain>"}/{name || "<name>"}
+                    </Code>
+                    .
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          <Field
+            label="Environment variables"
+            hint="One KEY=VALUE per line. WordPress wires its database automatically."
+          >
+            <Textarea
+              value={envText}
+              onChange={(e) => setEnvText(e.target.value)}
+              className="font-mono text-xs"
+              placeholder={"APP_ENV=production\nDB_HOST=db-main"}
+            />
+          </Field>
+
+          {error && (
+            <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {error}
+            </p>
+          )}
+
+          <div className="flex items-center justify-between">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setStep(1)}>
+              <ArrowLeft size={13} /> Back
             </Button>
-            <Button type="submit" size="sm" loading={busy}>
+            <Button type="button" size="sm" onClick={() => setStep(3)}>
+              Continue <ArrowRight size={13} />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-white/5 bg-ink-950/40 p-3 text-xs">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Ready to deploy
+            </p>
+            <dl className="grid grid-cols-[110px_1fr] gap-x-4 gap-y-1.5 text-slate-300">
+              <dt className="text-slate-500">Name</dt>
+              <dd>
+                <Code>{name}</Code>
+              </dd>
+              <dt className="text-slate-500">Runtime</dt>
+              <dd>{preset?.label ?? presetId}</dd>
+              <dt className="text-slate-500">Source</dt>
+              <dd className="truncate">{source === "git" ? `${gitUrl} (${branch})` : "Fresh files"}</dd>
+              {domain && (
+                <>
+                  <dt className="text-slate-500">Domain</dt>
+                  <dd>
+                    {domain} <span className="text-slate-500">· SSL automatic</span>
+                  </dd>
+                </>
+              )}
+              {pathPrefix && (
+                <>
+                  <dt className="text-slate-500">Path URL</dt>
+                  <dd>
+                    https://{pathHost || hosts[0] || "<panel-domain>"}
+                    {pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`}
+                  </dd>
+                </>
+              )}
+              {isWp && wpAuto && (
+                <>
+                  <dt className="text-slate-500">Database</dt>
+                  <dd>
+                    <Code>wp_{name}</Code> on the panel MySQL server
+                  </dd>
+                  <dt className="text-slate-500">WP admin</dt>
+                  <dd>{wpUser || "admin"}</dd>
+                </>
+              )}
+            </dl>
+          </div>
+
+          {isWp && wpAuto && (
+            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200/80">
+              Admin password: <Code>{wpPass}</Code> — copy it now, it is
+              shown on this screen only.
+            </p>
+          )}
+
+          {error && (
+            <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              {error}
+            </p>
+          )}
+
+          <div className="flex items-center justify-between">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setStep(2)}>
+              <ArrowLeft size={13} /> Back
+            </Button>
+            <Button type="button" size="sm" loading={busy} onClick={deploy}>
               <Boxes size={13} /> Deploy
             </Button>
           </div>
         </div>
-      </form>
+      )}
     </Modal>
   );
 }
@@ -936,21 +1184,26 @@ function WpInstallModal({
   const [email, setEmail] = useState(userEmail);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ url: string; adminUser: string } | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  const job = useJob(jobId);
+  const jobResult = (job?.result ?? {}) as { url?: string; adminUser?: string };
+  const jobDone = job?.status === "done";
+  const jobFailed = job?.status === "error";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const res = await act<{ url: string; adminUser: string }>("app.wpinstall", {
+      const res = await act<{ job?: string }>("app.wpinstall", {
         name: app.name,
         title,
         adminUser: adminUser || "admin",
         adminPassword: adminPass,
         adminEmail: email || userEmail,
       });
-      setDone(res);
+      if (res?.job) setJobId(res.job);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -965,19 +1218,23 @@ function WpInstallModal({
       title={`WordPress install · ${app.name}`}
       description="Creates the database tables, the site and an admin account on the running app."
     >
-      {done ? (
-        <div className="space-y-3">
-          <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
-            WordPress is installed and ready.
-          </p>
-          <p className="text-xs text-slate-400">
-            Site: <Code>{done.url}</Code>
-            <br />
-            Admin user: <Code>{done.adminUser}</Code> — the password is the one you entered.
-          </p>
+      {jobId ? (
+        <JobProgress
+          job={job}
+          onBack={jobFailed ? () => setJobId(null) : undefined}
+          backLabel="Try again"
+        >
+          <div className="space-y-2 rounded-xl border border-white/5 bg-ink-950/40 p-3 text-xs text-slate-300">
+            <p className="text-emerald-300">WordPress is installed and ready.</p>
+            <p>
+              Site: <Code>{jobResult.url}</Code>
+              <br />
+              Admin user: <Code>{jobResult.adminUser}</Code> — the password is the one you entered.
+            </p>
+          </div>
           <div className="flex justify-end gap-2">
             <a
-              href={`${done.url}/wp-admin`}
+              href={`${jobResult.url}/wp-admin`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/5"
@@ -988,7 +1245,7 @@ function WpInstallModal({
               Done
             </Button>
           </div>
-        </div>
+        </JobProgress>
       ) : (
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
