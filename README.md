@@ -98,7 +98,21 @@ no compose edits.
 
 ## Create an app (domain or path)
 
-Apps → New application:
+Apps → New application — a three-step wizard:
+
+1. **Source** — name, runtime, and where the code comes from: *Fresh start* or
+   *GitHub repository* (URL + branch, cloned on first install).
+2. **Configure** — domain (existing or new), path route with live URL preview,
+   WordPress one-click options (admin user/password/email) when the runtime is
+   WordPress, and extra environment variables.
+3. **Deploy** — a summary (including the WP admin password, shown once), then a
+   live animated progress screen: checking settings → cloning the repository →
+   creating the MySQL database → creating the database user → pulling the image
+   → starting the container & routing → installing WordPress. The deploy runs in
+   the background, so closing the wizard does not cancel it; when it finishes
+   you get direct links to the site and wp-admin.
+
+Other things to know:
 
 - **Domain** — pick an existing hostname from the list or type a new one. It is
   attached to the app and gets a certificate automatically.
