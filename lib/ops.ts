@@ -276,7 +276,10 @@ export async function createApp(input: CreateAppInput, actor = "system"): Promis
   try {
     await applyApp(app);
   } catch (err) {
-    await execute("UPDATE apps SET status = 'error' WHERE id = ?", [id]);
+    // Roll back so a failed create does not leave a ghost app behind.
+    await execute("DELETE FROM domains WHERE app_id = ?", [id]);
+    await execute("DELETE FROM apps WHERE id = ?", [id]);
+    await fs.rm(path.join(SITES_DIR, name), { recursive: true, force: true }).catch(() => {});
     await logActivity("app.create", `${name}: ${err instanceof Error ? err.message : err}`, actor, false);
     throw err;
   }
@@ -559,7 +562,9 @@ export async function createDatabase(input: CreateDatabaseInput, actor = "system
   try {
     await applyDatabase(db);
   } catch (err) {
-    await execute("UPDATE db_services SET status = 'error' WHERE id = ?", [id]);
+    // Roll back so a failed create does not leave a ghost database behind.
+    await removeContainerSafe(null, `db-${name}`);
+    await execute("DELETE FROM db_services WHERE id = ?", [id]);
     await logActivity("db.create", `${name}: ${err instanceof Error ? err.message : err}`, actor, false);
     throw err;
   }
