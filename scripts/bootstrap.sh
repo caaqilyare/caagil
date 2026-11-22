@@ -36,8 +36,13 @@ if [ -d "$DIR/.git" ]; then
   git -C "$DIR" checkout -q "$BRANCH"
   git -C "$DIR" pull --ff-only origin "$BRANCH"
 elif [ -e "$DIR" ]; then
-  echo "$DIR exists but is not a Caagil git checkout. Move it away first." >&2
-  exit 1
+  log "$DIR exists without git metadata — converting it in place"
+  tmp="$(mktemp -d)"
+  git clone --depth 1 --branch "$BRANCH" "$REPO" "$tmp/repo"
+  # Copy code over the existing install; .env, data and edge are untouched.
+  tar -C "$tmp/repo" --exclude=.git -cf - . | tar -C "$DIR" -xf -
+  mv "$tmp/repo/.git" "$DIR/.git"
+  rm -rf "$tmp"
 else
   log "cloning $REPO"
   mkdir -p "$(dirname "$DIR")"
