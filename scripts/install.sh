@@ -84,7 +84,9 @@ fi
 
 # ── env ──────────────────────────────────────────────────────────
 mkdir -p "$DATA_DIR/sites" "$EDGE_DIR"
+FRESH_ENV=false
 if [ ! -f .env ]; then
+  FRESH_ENV=true
   log "writing .env"
   cat > .env <<EOF
 AUTH_SECRET=$(openssl rand -hex 32)
@@ -111,13 +113,12 @@ if [ -n "$PANEL_DOMAIN" ] && [ -z "$ACME_EMAIL" ]; then
 fi
 
 # ── edge routing (Traefik file provider) ─────────────────────────
-# On re-runs, report the credentials that actually exist in .env.
+# On re-runs, report the domain that actually exists in .env. The password
+# there is only the initial one — it goes stale if changed in the panel.
 if [ -f .env ]; then
   saved_email="$(grep -m1 '^ADMIN_EMAIL=' .env | cut -d= -f2- || true)"
-  saved_pass="$(grep -m1 '^ADMIN_PASSWORD=' .env | cut -d= -f2- || true)"
   saved_domain="$(grep -m1 '^PANEL_DOMAIN=' .env | cut -d= -f2- || true)"
   if [ -n "$saved_email" ]; then ADMIN_EMAIL="$saved_email"; fi
-  if [ -n "$saved_pass" ]; then ADMIN_PASSWORD="$saved_pass"; fi
   if [ -n "$saved_domain" ]; then PANEL_DOMAIN="$saved_domain"; fi
 fi
 
@@ -199,12 +200,18 @@ if [ "$allow_ip_effective" = "true" ]; then
   panel_lines+="    IP      http://${ip}"$'\n'
 fi
 
+if [ "$FRESH_ENV" = "true" ]; then
+  pass_line="    Pass    ${ADMIN_PASSWORD}"
+else
+  pass_line="    Pass    unchanged (use the password you set in the panel)"
+fi
+
 cat <<EOF
 
   Caagil is up.
 
 ${panel_lines}    Login   ${ADMIN_EMAIL}
-    Pass    ${ADMIN_PASSWORD}
+${pass_line}
     Data    ${DATA_DIR}
     Edge    ${EDGE_DIR}/panel.yml
 
