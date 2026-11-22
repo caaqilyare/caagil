@@ -58,6 +58,7 @@ export function useJob(jobId: string | null, onDone?: (job: Job) => void): Job |
       if (!stopped) timer = setTimeout(poll, 900);
     }
 
+    setJob(null);
     void poll();
     return () => {
       stopped = true;

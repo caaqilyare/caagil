@@ -95,12 +95,17 @@ export function traefikLabels(
 
     if (route.path && route.strip) {
       stripPath = route.path;
-      labels[`traefik.http.routers.${router}.middlewares`] = `${service}-strip`;
+      labels[`traefik.http.routers.${router}.middlewares`] = `${service}-strip,${service}-fwd`;
     }
   });
 
   if (stripPath) {
     labels[`traefik.http.middlewares.${service}-strip.stripprefix.prefixes`] = stripPath;
+    // Tell the app where the public URL lives so frameworks that rebuild
+    // redirects from the request path (WordPress auth, …) keep the prefix.
+    labels[
+      `traefik.http.middlewares.${service}-fwd.headers.customRequestHeaders.X-Forwarded-Prefix`
+    ] = stripPath;
   }
 
   labels[`traefik.http.middlewares.${service}-https.redirectscheme.scheme`] = "https";

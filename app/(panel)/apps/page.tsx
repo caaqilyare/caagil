@@ -69,7 +69,7 @@ const isWpApp = (app: { runtime: string; image: string }) =>
   /wordpress/i.test(`${app.runtime} ${app.image}`);
 
 export default function AppsPage() {
-  const { state, loading, act } = usePanel();
+  const { state, loading, act, reload } = usePanel();
   const [open, setOpen] = useState(false);
   const [logsFor, setLogsFor] = useState<AppRow | null>(null);
   const [routeFor, setRouteFor] = useState<AppRow | null>(null);
@@ -288,6 +288,7 @@ export default function AppsPage() {
         onCreate={async (payload) => {
           return act<{ job?: string }>("app.create", payload);
         }}
+        onCreated={() => void reload()}
       />
 
       <Modal
@@ -398,6 +399,7 @@ function CreateAppModal({
   hosts,
   userEmail,
   onCreate,
+  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
@@ -405,6 +407,7 @@ function CreateAppModal({
   hosts: string[];
   userEmail: string;
   onCreate: (payload: Record<string, unknown>) => Promise<{ job?: string } | void>;
+  onCreated?: () => void;
 }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -435,7 +438,7 @@ function CreateAppModal({
   const isWp = presetId === "wordpress";
   const isCustom = presetId === "custom";
 
-  const job = useJob(jobId);
+  const job = useJob(jobId, () => onCreated?.());
   const jobDone = job?.status === "done";
   const jobFailed = job?.status === "error";
 
@@ -1176,7 +1179,7 @@ function WpInstallModal({
   userEmail: string;
   onClose: () => void;
 }) {
-  const { act } = usePanel();
+  const { act, reload } = usePanel();
   const [title, setTitle] = useState(app.name);
   const [adminUser, setAdminUser] = useState("admin");
   const [adminPass, setAdminPass] = useState(() => generatePassword());
@@ -1186,7 +1189,8 @@ function WpInstallModal({
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  const job = useJob(jobId);
+  const job = useJob(jobId, () => void reload());
+
   const jobResult = (job?.result ?? {}) as { url?: string; adminUser?: string };
   const jobDone = job?.status === "done";
   const jobFailed = job?.status === "error";

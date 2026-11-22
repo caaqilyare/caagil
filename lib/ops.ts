@@ -3,7 +3,7 @@ import path from "node:path";
 import mysql from "mysql2/promise";
 import { execute, one, query, logActivity, getSetting, setSetting } from "./db";
 import { randomId, shortPassword } from "./crypto";
-import { ENGINES, findPreset } from "./presets";
+import { ENGINES, findPreset, type RuntimePreset } from "./presets";
 import { cloneOrPull } from "./git";
 import {
   containerIp,
@@ -28,6 +28,7 @@ import {
   installWordPress,
   MYSQL_HOST,
   WP_PROXY_HTTPS,
+  wpPrefixSnippet,
   type WpInstallInput,
 } from "./wp";
 import {
@@ -245,6 +246,107 @@ export type ProgressReporter = (
   detail?: string,
 ) => void;
 
+/* ── Fresh-app runtime defaults ─────────────────────────────────────────── */
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    return (await fs.stat(p)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+const LANDING_HTML = (title: string, body: string) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${title}</title>
+</head>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#070b10;color:#dfe7f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;text-align:center;">
+<div style="max-width:520px;padding:40px">
+<h1 style="font-size:28px;margin:0 0 12px">${title}</h1>
+<p style="color:#8b98a9;line-height:1.6">${body}</p>
+</div>
+</body>
+</html>`;
+
+const LANDING_PHP = `<?php
+header('Content-Type: text/html; charset=utf-8');
+?>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Your site is live</title>
+</head>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#070b10;color:#dfe7f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;text-align:center;">
+<div style="max-width:520px;padding:40px">
+<h1 style="font-size:28px;margin:0 0 12px">Your site is live</h1>
+<p style="color:#8b98a9;line-height:1.6">Welcome to your new app. Replace this page by dropping your files into the panel file manager.</p>
+</div>
+</body>
+</html>`;
+
+/** Landing placeholders so a fresh app (no git) answers immediately instead of 403. */
+async function ensureFreshRuntime(appName: string, preset: RuntimePreset, port: number): Promise<void> {
+  const dir = path.join(SITES_DIR, appName);
+  if (preset.group === "static") {
+    const idx = path.join(dir, "index.html");
+    if (await fileExists(idx)) return;
+    await fs.writeFile(idx, LANDING_HTML("Your site is live", "This page will be replaced by your own files."));
+  } else if (preset.group === "php") {
+    const idx = path.join(dir, "index.php");
+    if (await fileExists(idx)) return;
+    await fs.writeFile(idx, LANDING_PHP);
+  } else if (preset.group === "node") {
+    const pkg = path.join(dir, "package.json");
+    const srv = path.join(dir, "index.js");
+    if (await fileExists(pkg)) return;
+    await fs.writeFile(
+      pkg,
+      JSON.stringify(
+        { name: appName, version: "0.0.0", private: true, scripts: { start: "node index.js" }, dependencies: {} },
+        null,
+        2,
+      ),
+    );
+    await fs.writeFile(
+      srv,
+      [
+        "const http = require('http');",
+        `const port = Number(process.env.PORT || ${port});`,
+        "const server = http.createServer((req, res) => {",
+        "  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });",
+        "  res.end('<!doctype html><html><body style=\\\"margin:0;min-height:100vh;display:grid;place-items:center;background:#070b10;color:#dfe7f1;font-family:sans-serif;text-align:center\\\">Your node app is live. Drop your code in the panel file manager.</body></html>');",
+        "});",
+        "server.listen(port, '0.0.0.0', () => console.log('listening on ' + port));",
+        "",
+      ].join("\n"),
+    );
+  }
+}
+
+/** Laravel-style repos keep the real entry point in <dir>/public — rewrite /. */
+async function writeLaravelRewrite(dir: string): Promise<void> {
+  const pubIndex = path.join(dir, "public", "index.php");
+  if (!(await fileExists(pubIndex))) return;
+  const ht = path.join(dir, ".htaccess");
+  if (await fileExists(ht)) return; // the repository ships its own rules
+  await fs.writeFile(
+    ht,
+    [
+      "<IfModule mod_rewrite.c>",
+      "RewriteEngine On",
+      "RewriteBase /",
+      "RewriteRule ^(.*)$ public/$1 [L]",
+      "</IfModule>",
+      "",
+    ].join("\n"),
+  );
+}
+
 export async function createApp(
   input: CreateAppInput,
   actor = "system",
@@ -284,24 +386,54 @@ export async function createApp(
   const port = Number(input.port || preset.port);
   const env = { ...(preset.env ?? {}), ...(input.env ?? {}) };
 
+  // Plain Apache presets serving a Laravel-style repository: point the
+  // document root at <dir>/public so the framework's real entry point works.
+  let command = input.command ?? preset.command ?? null;
+  if (!command && preset.group === "php") {
+    if (await fileExists(path.join(SITES_DIR, name, "public", "index.php"))) {
+      command =
+        "a2enmod rewrite >/dev/null 2>&1; sed -i 's#</VirtualHost>#  <Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n  </Directory>\n  DocumentRoot /var/www/html/public\n</VirtualHost>#' /etc/apache2/sites-available/000-default.conf; apache2-foreground";
+    }
+  }
+
+  // Fresh apps (no git) get a landing placeholder so they answer instead of
+  // 403ing; Laravel-style clones get the /public rewrite.
+  if (input.gitUrl) {
+    if (preset.group === "php" || preset.id === "laravel") {
+      // Laravel-style repos keep the real entry point in <dir>/public.
+      await writeLaravelRewrite(path.join(SITES_DIR, name));
+    }
+  } else if (preset.group === "node") {
+    await ensureFreshRuntime(name, preset, port);
+  } else if (preset.group === "php" || preset.group === "static") {
+    await ensureFreshRuntime(name, preset, port);
+  }
+
   // WordPress one-click: a managed database on the panel MySQL server plus
   // reverse-proxy HTTPS detection — unless the user wired their own DB env.
   const isWp = preset.id === "wordpress" || /wordpress/i.test(image);
   const autoWp = isWp && input.wp?.autoInstall !== false;
   let wpDb: { name: string; username: string; password: string; host: string } | null = null;
-  if (isWp && !env.WORDPRESS_DB_HOST) {
-    report?.("database", "active");
-    const dbName = (await createAppDatabase(name)).name;
-    report?.("database", "done", dbName);
-    report?.("dbuser", "active");
-    const { username, password } = await createAppDatabaseUser(name);
-    report?.("dbuser", "done", username);
-    wpDb = { name: dbName, username, password, host: MYSQL_HOST };
-    env.WORDPRESS_DB_HOST = wpDb.host;
-    env.WORDPRESS_DB_NAME = wpDb.name;
-    env.WORDPRESS_DB_USER = wpDb.username;
-    env.WORDPRESS_DB_PASSWORD = wpDb.password;
-    if (!env.WORDPRESS_CONFIG_EXTRA) env.WORDPRESS_CONFIG_EXTRA = WP_PROXY_HTTPS;
+  if (isWp) {
+    // HTTPS + path-prefix aware wp-config.php snippet (appended to whatever
+    // custom config the user wired through the env textarea).
+    let extra = env.WORDPRESS_CONFIG_EXTRA && env.WORDPRESS_CONFIG_EXTRA.trim() ? env.WORDPRESS_CONFIG_EXTRA : WP_PROXY_HTTPS;
+    const wpPrefix = input.pathPrefix ? normalizePath(input.pathPrefix) : null;
+    if (wpPrefix) extra += "\n" + wpPrefixSnippet(wpPrefix);
+    env.WORDPRESS_CONFIG_EXTRA = extra;
+    if (!env.WORDPRESS_DB_HOST) {
+      report?.("database", "active");
+      const dbName = (await createAppDatabase(name)).name;
+      report?.("database", "done", dbName);
+      report?.("dbuser", "active");
+      const { username, password } = await createAppDatabaseUser(name);
+      report?.("dbuser", "done", username);
+      wpDb = { name: dbName, username, password, host: MYSQL_HOST };
+      env.WORDPRESS_DB_HOST = wpDb.host;
+      env.WORDPRESS_DB_NAME = wpDb.name;
+      env.WORDPRESS_DB_USER = wpDb.username;
+      env.WORDPRESS_DB_PASSWORD = wpDb.password;
+    }
   }
 
   // Path route: explicit from the user, or a default /<name> route so a
@@ -336,7 +468,7 @@ export async function createApp(
       name,
       input.preset,
       image,
-      input.command ?? preset.command ?? null,
+      command,
       port,
       JSON.stringify(env),
       primaryHost,

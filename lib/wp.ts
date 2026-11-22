@@ -15,6 +15,16 @@ export const MYSQL_HOST = "mysql:3306";
 export const WP_PROXY_HTTPS =
   "if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') !== false) { $_SERVER['HTTPS'] = 'on'; }";
 
+/** Rewrites $_SERVER['REQUEST_URI'] so WordPress keeps the public path prefix
+ * behind a stripped path route (e.g. /blog → REQUEST_URI /blog/wp-admin/…). */
+export function wpPrefixSnippet(prefix: string): string {
+  const p = prefix.startsWith("/") ? prefix : `/${prefix}`;
+  return (
+    `if (isset($_SERVER['HTTP_X_FORWARDED_PREFIX']) && strpos($_SERVER['HTTP_X_FORWARDED_PREFIX'], '${p}') === 0) {` +
+    ` $_SERVER['REQUEST_URI'] = $_SERVER['HTTP_X_FORWARDED_PREFIX'] . $_SERVER['REQUEST_URI']; }`
+  );
+}
+
 async function mysqlContainer() {
   const candidates = ["caagil-mysql-1", "caagil_mysql_1", "mysql"];
   for (const name of candidates) {
