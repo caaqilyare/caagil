@@ -175,6 +175,20 @@ docker compose up -d --build
 Application data volumes (`caagil-db-*`) can be migrated the same way. DNS
 points at the new IP and certificates are re-issued automatically.
 
+## SSL management (cPanel-style "Add SSL")
+
+Every hostname is probed live — **Domains** shows a badge per domain
+(`Let's Encrypt · 82d left`, `no SSL yet`, …) and a **Check SSL** button refreshes
+the probes.
+
+- When a domain is added, Traefik requests the certificate immediately and the
+  panel watches in the background, logging `certificate live` once HTTPS works.
+- If a certificate is missing (DNS was late, rate limit, …) press **Add SSL** on
+  the domain card — or next to the panel domain in **Settings**. It runs a
+  step-by-step job: checking DNS → refreshing the HTTPS route → requesting the
+  Let's Encrypt certificate → verifying HTTPS, and tells you exactly what failed
+  (e.g. "does not resolve in DNS yet — add an A record → 193.x.x.x first").
+
 ## Resource notes
 
 2 GB RAM is the floor. A busy stack (panel + MySQL + MongoDB + two apps) wants
