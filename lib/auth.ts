@@ -12,9 +12,11 @@ export type SessionUser = { id: string; email: string; role: string };
 
 type UserRow = { id: string; email: string; password: string; role: string };
 
-export async function authenticate(email: string, password: string): Promise<SessionUser | null> {
+export async function authenticate(login: string, password: string): Promise<SessionUser | null> {
+  // The users.email column stores the sign-in name, which may be a plain
+  // username or an email address (both are lowercased at setup).
   const user = await one<UserRow>("SELECT id, email, password, role FROM users WHERE email = ?", [
-    email.trim().toLowerCase(),
+    login.trim().toLowerCase(),
   ]);
   if (!user) return null;
   if (!verifyPassword(password, user.password)) return null;

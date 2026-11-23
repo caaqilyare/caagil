@@ -7,7 +7,7 @@ import { Button, Input } from "@/components/ui";
 
 export function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ login, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Login failed");
@@ -51,13 +51,15 @@ export function LoginForm() {
 
         <form onSubmit={submit} className="card space-y-4 p-5">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Email</label>
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              Username or email
+            </label>
             <Input
-              type="email"
+              type="text"
               autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="admin or you@example.com"
               required
             />
           </div>
