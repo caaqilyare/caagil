@@ -105,6 +105,34 @@ Settings → Panel:
 These write `/opt/caaqil/edge/panel.yml`, which Traefik watches. No restart and
 no compose edits.
 
+## Update the panel from GitHub
+
+Every install includes a small `updater` sidecar with the git checkout and the
+Docker socket mounted. **Settings → Panel updates** checks `origin/main` every
+few minutes (and on demand with the refresh icon):
+
+1. A pulsing **Update available** badge appears when GitHub has new commits,
+   with `main @ abc1234 · you run def5678`.
+2. **Update now** runs `git pull --ff-only`, rebuilds only the panel image and
+   recreates only the panel container. MySQL, apps and volumes keep running.
+3. A progress overlay shows each step and the live build log; the page reloads
+   by itself when the new panel answers.
+
+The running commit is baked into the image (`CAAQIL_COMMIT`) by
+`scripts/install.sh`, so a build without that metadata simply hides the badge.
+
+Manual update, same thing on the server:
+
+```bash
+cd /opt/caaqil
+git pull --ff-only
+docker compose up -d --build panel
+```
+
+If an update fails, the panel keeps running the old image and the log is shown
+in the overlay. Re-run `bash /opt/caaqil/scripts/install.sh` to restore the
+sidecar if it was removed.
+
 ## Create an app (domain or path)
 
 Apps → New application — a three-step wizard:

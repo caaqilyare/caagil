@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Globe, KeyRound, Lock, Save, Server, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, Globe, KeyRound, Lock, RefreshCw, Save, Server, ShieldCheck, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/shell";
 import { Badge, Button, Card, Code, Field, Input, Select } from "@/components/ui";
 import { SslBadge, SslFixModal, useSslStatus } from "@/components/ssl";
+import { UpdateCard } from "@/components/update-card";
 import { usePanel } from "@/lib/client";
 
 export default function SettingsPage() {
@@ -237,6 +238,17 @@ export default function SettingsPage() {
           {error && <span className="text-xs text-red-300">{error}</span>}
         </div>
       </form>
+
+      <Card className="mt-4 max-w-xl space-y-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+          <RefreshCw size={14} className="text-brand-400" /> Panel updates
+        </h2>
+        <p className="text-[11px] leading-relaxed text-slate-500">
+          Checks <Code>origin/main</Code> on GitHub. When a new commit is available the panel pulls it,
+          rebuilds its own image and restarts — apps and data are untouched.
+        </p>
+        <UpdateCard />
+      </Card>
 
       <ChangePassword />
 

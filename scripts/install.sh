@@ -132,6 +132,21 @@ else
   log ".env already exists — keeping it"
 fi
 
+# ── build identity (used by the in-panel updater) ─────────────────
+COMMIT="$(git -C "$DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+if grep -q '^CAAQIL_COMMIT=' .env; then
+  sed -i "s|^CAAQIL_COMMIT=.*|CAAQIL_COMMIT=${COMMIT}|" .env
+else
+  echo "CAAQIL_COMMIT=${COMMIT}" >> .env
+fi
+if grep -q '^CAAQIL_INSTALL_DIR=' .env; then
+  sed -i "s|^CAAQIL_INSTALL_DIR=.*|CAAQIL_INSTALL_DIR=${DIR}|" .env
+else
+  echo "CAAQIL_INSTALL_DIR=${DIR}" >> .env
+fi
+export CAAQIL_COMMIT
+log "build ${COMMIT:0:12} from ${DIR}"
+
 if [ -n "$PANEL_DOMAIN" ] && [ -z "$ACME_EMAIL" ]; then
   warn "ACME_EMAIL is empty: HTTPS certificate issuance will fail."
 fi

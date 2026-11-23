@@ -45,7 +45,10 @@ services:
       - panel
 
   panel:
-    build: .
+    build:
+      context: .
+      args:
+        CAAQIL_COMMIT: ${CAAQIL_COMMIT:-unknown}
     restart: unless-stopped
     depends_on:
       mysql:
@@ -72,10 +75,28 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      CAAQIL_COMMIT: ${CAAQIL_COMMIT:-unknown}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${CAAQIL_DATA_DIR:-/opt/caaqil/data}:/app/data
       - ${CAAQIL_EDGE_DIR:-/opt/caaqil/edge}:/edge
+    networks:
+      - panel
+
+  # Tiny sidecar that owns the git checkout and the Docker socket. The panel
+  # asks it to check GitHub and to rebuild only the panel service, so the
+  # updater keeps running while the panel container is recreated.
+  updater:
+    build:
+      context: .
+      dockerfile: scripts/updater.Dockerfile
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+    environment:
+      CAAQIL_INSTALL_DIR: /repo
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CAAQIL_INSTALL_DIR:-/opt/caaqil}:/repo
     networks:
       - panel
 

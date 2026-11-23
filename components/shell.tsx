@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Boxes,
   Database,
@@ -34,6 +35,29 @@ export function Shell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [updateReady, setUpdateReady] = useState(false);
+
+  // A quiet dot next to Settings when GitHub main is ahead. The Settings page
+  // owns the full update UI; this is only a hint.
+  useEffect(() => {
+    let alive = true;
+    async function check() {
+      try {
+        const res = await fetch("/api/update", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { available?: boolean; running?: boolean };
+        if (alive) setUpdateReady(Boolean(data.available || data.running));
+      } catch {
+        // Offline or the panel is restarting mid-update.
+      }
+    }
+    void check();
+    const id = setInterval(check, 10 * 60 * 1000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -74,6 +98,12 @@ export function Shell({
                   className={cn(active ? "text-brand-400" : "text-slate-500 group-hover:text-slate-300")}
                 />
                 {item.label}
+                {item.href === "/settings" && updateReady && (
+                  <span className="relative ml-auto flex h-1.5 w-1.5" title="Panel update available">
+                    <span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-amber-400 opacity-75" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -110,7 +140,12 @@ export function Shell({
                 )}
                 aria-label={item.label}
               >
-                <item.icon size={16} />
+                <span className="relative">
+                  <item.icon size={16} />
+                  {item.href === "/settings" && updateReady && (
+                    <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  )}
+                </span>
               </Link>
             ))}
           </nav>

@@ -17,6 +17,11 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 RUN apk add --no-cache git openssh-client ca-certificates tzdata
 
+# Commit the panel was built from, used by the updater to tell whether
+# GitHub main is ahead of the running image.
+ARG CAAQIL_COMMIT=unknown
+ENV CAAQIL_COMMIT=$CAAQIL_COMMIT
+
 ENV NODE_ENV=production \
     PORT=4000 \
     HOSTNAME=0.0.0.0 \

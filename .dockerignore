@@ -1,0 +1,10 @@
+# Never ship local install state or build output into the image / build context.
+node_modules
+.next
+.git
+data
+edge
+.env
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
