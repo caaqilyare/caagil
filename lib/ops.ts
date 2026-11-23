@@ -8,6 +8,7 @@ import { cloneOrPull } from "./git";
 import {
   containerIp,
   containerLogs,
+  containerName,
   docker,
   ensureNetwork,
   HOST_SITES_DIR,
@@ -522,7 +523,7 @@ export async function createApp(
     await logActivity("app.create", `${name}: ${err instanceof Error ? err.message : err}`, actor, false);
     throw err;
   }
-  report?.("container", "done", `caagil-${name}`);
+  report?.("container", "done", containerName(name));
 
   let wpWarning: string | null = null;
   if (autoWp) {
@@ -784,7 +785,7 @@ export async function getDatabase(id: string): Promise<DatabaseRow | null> {
 
 function databaseEnv(db: DatabaseRow): { env: Record<string, string>; command?: string } {
   const pw = db.password || "";
-  const user = db.username || "caagil";
+  const user = db.username || "caaqil";
   const name = db.dbname || db.name;
   switch (db.engine) {
     case "mysql":
@@ -849,7 +850,7 @@ async function grantRemoteMysql(db: DatabaseRow) {
     connectTimeout: 5000,
   });
   try {
-    const user = (db.username || "caagil").replace(/'/g, "");
+    const user = (db.username || "caaqil").replace(/'/g, "");
     const dbname = (db.dbname || db.name).replace(/`/g, "");
     await conn.query(
       `CREATE USER IF NOT EXISTS '${user}'@'%' IDENTIFIED BY ${conn.escape(db.password || "")}`,
@@ -872,7 +873,11 @@ async function applyDatabase(db: DatabaseRow) {
       ? { [`${port}/tcp`]: [{ HostIp: "0.0.0.0", HostPort: String(db.public_port) }] }
       : undefined;
 
-  const existing = docker.getContainer(`caagil-db-${db.name}`);
+  // Rows created before the rename keep their caagil-db-* volume/container
+  // name, so the existing data volume is reused instead of a fresh one.
+  const tag = db.volume || `caaqil-db-${db.name}`;
+
+  const existing = docker.getContainer(tag);
   await existing
     .inspect()
     .then(async () => {
@@ -882,14 +887,14 @@ async function applyDatabase(db: DatabaseRow) {
     .catch(() => {});
 
   const container = await docker.createContainer({
-    name: `caagil-db-${db.name}`,
+    name: tag,
     Image: image,
     Cmd: command ? ["sh", "-lc", command] : undefined,
     Env: Object.entries(env).map(([k, v]) => `${k}=${v}`),
-    Labels: { "caagil.managed": "true", "caagil.kind": "database" },
+    Labels: { "caaqil.managed": "true", "caaqil.kind": "database" },
     HostConfig: {
       RestartPolicy: { Name: "unless-stopped" },
-      Binds: [`caagil-db-${db.name}:${db.engine === "mongo" ? "/data/db" : db.engine === "postgres" ? "/var/lib/postgresql/data" : db.engine === "redis" ? "/data" : "/var/lib/mysql"}`],
+      Binds: [`${tag}:${db.engine === "mongo" ? "/data/db" : db.engine === "postgres" ? "/var/lib/postgresql/data" : db.engine === "redis" ? "/data" : "/var/lib/mysql"}`],
       NetworkMode: NETWORK,
       PortBindings: portBindings,
     },
@@ -927,7 +932,7 @@ export async function createDatabase(input: CreateDatabaseInput, actor = "system
     throw new Error(`A database named "${name}" already exists.`);
   }
 
-  const username = (input.username || "caagil").replace(/[^a-zA-Z0-9_]/g, "");
+  const username = (input.username || "caaqil").replace(/[^a-zA-Z0-9_]/g, "");
   const password = input.password || shortPassword(24);
   const publicPort = input.publicPort || 33000 + Math.floor(Math.random() * 2000);
   const now = Date.now();
@@ -947,7 +952,7 @@ export async function createDatabase(input: CreateDatabaseInput, actor = "system
       username,
       password,
       (input.dbname || name).replace(/[^a-zA-Z0-9_]/g, "_"),
-      `caagil-db-${name}`,
+      `caaqil-db-${name}`,
       input.remote ? 1 : 0,
       "created",
       now,
@@ -1467,7 +1472,7 @@ export async function overview() {
     stats,
     publicIp,
     panel: {
-      name: (await getSetting("panel_name")) || "Caagil",
+      name: (await getSetting("panel_name")) || "Caaqil",
       domain: edge.domain,
       allowIp: edge.allowIp,
       ip: edge.ip,

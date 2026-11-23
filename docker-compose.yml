@@ -1,4 +1,4 @@
-name: caagil
+name: caaqil
 
 services:
   mysql:
@@ -6,13 +6,13 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${PANEL_DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: caagil
-      MYSQL_USER: caagil
+      MYSQL_DATABASE: ${PANEL_DB_NAME:-caaqil}
+      MYSQL_USER: ${PANEL_DB_USER:-caaqil}
       MYSQL_PASSWORD: ${PANEL_DB_PASSWORD}
     volumes:
-      - caagil-mysql:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
     networks:
-      - caagil
+      - panel
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${PANEL_DB_ROOT_PASSWORD}"]
       interval: 10s
@@ -25,7 +25,7 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=caagil
+      - --providers.docker.network=${PANEL_NETWORK:-caaqil}
       - --providers.file.directory=/edge
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
@@ -39,10 +39,10 @@ services:
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - caagil-letsencrypt:/letsencrypt
-      - ${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}:/edge:ro
+      - letsencrypt:/letsencrypt
+      - ${CAAQIL_EDGE_DIR:-/opt/caaqil/edge}:/edge:ro
     networks:
-      - caagil
+      - panel
 
   panel:
     build: .
@@ -55,35 +55,37 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      CAAGIL_AUTO_ADMIN: ${CAAGIL_AUTO_ADMIN:-false}
+      CAAQIL_AUTO_ADMIN: ${CAAQIL_AUTO_ADMIN:-false}
       PANEL_DB_HOST: mysql
       PANEL_DB_PORT: 3306
-      PANEL_DB_USER: caagil
+      PANEL_DB_USER: ${PANEL_DB_USER:-caaqil}
       PANEL_DB_PASSWORD: ${PANEL_DB_PASSWORD}
-      PANEL_DB_NAME: caagil
+      PANEL_DB_NAME: ${PANEL_DB_NAME:-caaqil}
       DATA_DIR: /app/data
-      HOST_DATA_DIR: ${CAAGIL_DATA_DIR:-/opt/caaqil/data}
+      HOST_DATA_DIR: ${CAAQIL_DATA_DIR:-/opt/caaqil/data}
       DOCKER_SOCKET: /var/run/docker.sock
-      PANEL_NETWORK: caagil
+      PANEL_NETWORK: ${PANEL_NETWORK:-caaqil}
       PANEL_DOMAIN: ${PANEL_DOMAIN}
       PANEL_URL: https://${PANEL_DOMAIN}
       EDGE_DIR: /edge
-      NEXT_PUBLIC_PANEL_NAME: ${PANEL_NAME:-Caagil}
+      NEXT_PUBLIC_PANEL_NAME: ${PANEL_NAME:-Caaqil}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${CAAGIL_DATA_DIR:-/opt/caaqil/data}:/app/data
-      - ${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}:/edge
+      - ${CAAQIL_DATA_DIR:-/opt/caaqil/data}:/app/data
+      - ${CAAQIL_EDGE_DIR:-/opt/caaqil/edge}:/edge
     networks:
-      - caagil
+      - panel
 
 volumes:
-  caagil-mysql:
-  caagil-letsencrypt:
+  mysql-data:
+    name: ${CAAQIL_MYSQL_VOLUME:-caaqil-mysql}
+  letsencrypt:
+    name: ${CAAQIL_LETSENCRYPT_VOLUME:-caaqil-letsencrypt}
 
 networks:
-  caagil:
-    name: caagil
+  panel:
+    name: ${PANEL_NETWORK:-caaqil}
     driver: bridge

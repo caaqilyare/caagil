@@ -44,7 +44,7 @@ export function LoginForm() {
             <Terminal size={22} className="text-ink-950" strokeWidth={2.6} />
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-white">
-            {process.env.NEXT_PUBLIC_PANEL_NAME || "Caagil"}
+            {process.env.NEXT_PUBLIC_PANEL_NAME || "Caaqil"}
           </h1>
           <p className="mt-1 text-sm text-slate-400">Sign in to your hosting panel</p>
         </div>

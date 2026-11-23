@@ -28,7 +28,7 @@ export function wpPrefixSnippet(prefix: string): string {
 }
 
 async function mysqlContainer() {
-  const candidates = ["caagil-mysql-1", "caagil_mysql_1", "mysql"];
+  const candidates = ["caaqil-mysql-1", "caaqil_mysql_1", "caagil-mysql-1", "caagil_mysql_1", "mysql"];
   for (const name of candidates) {
     try {
       const c = docker.getContainer(name);
@@ -261,7 +261,7 @@ export async function installWordPress(
   let container: Docker.Container;
   try {
     container = await docker.createContainer({
-      name: `caagil-wpcli-${randomId()}`,
+      name: `caaqil-wpcli-${randomId()}`,
       Image: WP_CLI_IMAGE,
       Cmd: ["sh", "-c", INSTALL_SCRIPT],
       Env: [
@@ -275,7 +275,7 @@ export async function installWordPress(
       ],
       User: "0:0",
       WorkingDir: "/var/www/html",
-      Labels: { "caagil.managed": "true" },
+      Labels: { "caaqil.managed": "true" },
       HostConfig: {
         Binds: [`${HOST_SITES_DIR}/${app.name}:/var/www/html`],
         NetworkMode: NETWORK,

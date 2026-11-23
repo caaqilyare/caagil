@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const panelName =
-    (await getSetting("panel_name")) || process.env.NEXT_PUBLIC_PANEL_NAME || "Caagil";
+    (await getSetting("panel_name")) || process.env.NEXT_PUBLIC_PANEL_NAME || "Caaqil";
 
   return (
     <Shell user={user} panelName={panelName}>

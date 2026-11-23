@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { execute, one } from "./db";
 import { randomId, randomToken, verifyPassword } from "./crypto";
 
-const COOKIE = "caagil_session";
+const COOKIE = "caaqil_session";
+/** Cookie issued before the rename; still read so nobody is signed out. */
+const LEGACY_COOKIE = "caagil_session";
 const TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
 export type SessionUser = { id: string; email: string; role: string };
@@ -40,14 +42,15 @@ export async function createSession(userId: string, secure = process.env.NODE_EN
 
 export async function destroySession(): Promise<void> {
   const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
+  const token = jar.get(COOKIE)?.value ?? jar.get(LEGACY_COOKIE)?.value;
   if (token) await execute("DELETE FROM sessions WHERE id = ?", [token]).catch(() => {});
   jar.delete(COOKIE);
+  jar.delete(LEGACY_COOKIE);
 }
 
 export async function currentUser(): Promise<SessionUser | null> {
   const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
+  const token = jar.get(COOKIE)?.value ?? jar.get(LEGACY_COOKIE)?.value;
   if (!token) return null;
   const row = await one<UserRow>(
     `SELECT u.id, u.email, u.role

@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise";
 import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
-const DB_NAME = process.env.PANEL_DB_NAME || "caagil";
+const DB_NAME = process.env.PANEL_DB_NAME || "caaqil";
 
 const base = {
   host: process.env.PANEL_DB_HOST || "127.0.0.1",
@@ -174,16 +174,16 @@ async function seed(pool: Pool) {
   if (Number(rows[0]?.c ?? 0) > 0) return;
 
   // Default: the first visitor creates the owner account at /setup.
-  // Set CAAGIL_AUTO_ADMIN=true for unattended provisioning.
-  if (process.env.CAAGIL_AUTO_ADMIN !== "true") {
-    console.log("[caagil] no users yet: first visit will open the setup wizard");
+  // Set CAAQIL_AUTO_ADMIN=true for unattended provisioning.
+  if ((process.env.CAAQIL_AUTO_ADMIN ?? process.env.CAAGIL_AUTO_ADMIN) !== "true") {
+    console.log("[caaqil] no users yet: first visit will open the setup wizard");
     return;
   }
 
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
   if (!email || !password) {
-    console.warn("[caagil] CAAGIL_AUTO_ADMIN=true but ADMIN_EMAIL/ADMIN_PASSWORD are missing");
+    console.warn("[caaqil] CAAQIL_AUTO_ADMIN=true but ADMIN_EMAIL/ADMIN_PASSWORD are missing");
     return;
   }
   const { hashPassword, randomId } = await import("./crypto");
@@ -194,19 +194,19 @@ async function seed(pool: Pool) {
     "owner",
     Date.now(),
   ]);
-  console.log(`[caagil] created owner account ${email}`);
+  console.log(`[caaqil] created owner account ${email}`);
 }
 
-const g = globalThis as unknown as { __caagilPool?: Promise<Pool> };
+const g = globalThis as unknown as { __caaqilPool?: Promise<Pool> };
 
 export function pool(): Promise<Pool> {
-  if (!g.__caagilPool) {
-    g.__caagilPool = bootstrap().catch((err) => {
-      g.__caagilPool = undefined;
+  if (!g.__caaqilPool) {
+    g.__caaqilPool = bootstrap().catch((err) => {
+      g.__caaqilPool = undefined;
       throw err;
     });
   }
-  return g.__caagilPool;
+  return g.__caaqilPool;
 }
 
 export async function query<T = RowDataPacket[]>(

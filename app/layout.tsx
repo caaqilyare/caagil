@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: `${process.env.NEXT_PUBLIC_PANEL_NAME || "Caagil"} · Hosting Panel`,
+  title: `${process.env.NEXT_PUBLIC_PANEL_NAME || "Caaqil"} · Hosting Panel`,
   description: "A small, fast, AI-native hosting control panel.",
 };
 

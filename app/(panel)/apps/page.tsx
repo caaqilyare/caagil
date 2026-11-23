@@ -683,7 +683,7 @@ function CreateAppModal({
               hint="Pick an existing domain or type a new one. The certificate is automatic."
             >
               <Input
-                list="caagil-domain-options"
+                list="caaqil-domain-options"
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder="app.example.com"
@@ -699,7 +699,7 @@ function CreateAppModal({
             </Field>
           </div>
 
-          <datalist id="caagil-domain-options">
+          <datalist id="caaqil-domain-options">
             {hosts.map((host) => (
               <option key={host} value={host} />
             ))}
@@ -715,7 +715,7 @@ function CreateAppModal({
               </Field>
               <Field label="Host" hint="Defaults to this panel's domain.">
                 <Input
-                  list="caagil-domain-options"
+                  list="caaqil-domain-options"
                   value={pathHost}
                   onChange={(e) => setPathHost(e.target.value)}
                   placeholder="panel.example.com"
@@ -960,7 +960,7 @@ function RouteModal({
           </Field>
           <Field label="Host" hint="Defaults to this panel's domain.">
             <Input
-              list="caagil-route-hosts"
+              list="caaqil-route-hosts"
               value={host}
               onChange={(e) => setHost(e.target.value)}
               placeholder="panel.example.com"
@@ -968,7 +968,7 @@ function RouteModal({
           </Field>
         </div>
 
-        <datalist id="caagil-route-hosts">
+        <datalist id="caaqil-route-hosts">
           {hosts.map((item) => (
             <option key={item} value={item} />
           ))}
@@ -1066,13 +1066,13 @@ function DomainsModal({
     >
       <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row">
         <Input
-          list="caagil-domain-picker"
+          list="caaqil-domain-picker"
           value={host}
           onChange={(e) => setHost(e.target.value)}
           placeholder="new or existing domain"
           className="flex-1"
         />
-        <datalist id="caagil-domain-picker">
+        <datalist id="caaqil-domain-picker">
           {free.map((item) => (
             <option key={item} value={item} />
           ))}

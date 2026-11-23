@@ -76,7 +76,7 @@ export default function SettingsPage() {
           </h2>
 
           <Field label="Panel name">
-            <Input value={panelName} onChange={(e) => setPanelName(e.target.value)} placeholder="Caagil" />
+            <Input value={panelName} onChange={(e) => setPanelName(e.target.value)} placeholder="Caaqil" />
           </Field>
 
           <Field

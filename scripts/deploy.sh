@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy Caagil from this machine to a server over SSH (development helper).
+# Deploy Caaqil from this machine to a server over SSH (development helper).
 #   ACME_EMAIL=you@example.com ./scripts/deploy.sh root@203.0.113.10 panel.example.com
 set -euo pipefail
 

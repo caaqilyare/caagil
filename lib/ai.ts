@@ -54,7 +54,7 @@ export async function getModel() {
   return createDeepSeek({ apiKey: cfg.key })(cfg.model);
 }
 
-export const SYSTEM_PROMPT = `You are the built-in operator of "Caagil", a self-hosted hosting panel.
+export const SYSTEM_PROMPT = `You are the built-in operator of "Caaqil", a self-hosted hosting panel.
 
 You can inspect and change the server through tools: Docker apps (PHP, Node.js, static, custom images),
 databases (MySQL, MariaDB, PostgreSQL, MongoDB, Redis), domains/Traefik routing, and external MySQL servers.

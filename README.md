@@ -1,4 +1,4 @@
-# Caagil
+# Caaqil
 
 A small, fast, AI-native hosting control panel. One container, one MySQL, one
 Traefik — it deploys PHP, Node.js and static sites, runs databases with optional
@@ -7,7 +7,7 @@ public access, and ships an AI operator that can actually do the work.
 ```
 Panel UI      Next.js 15 (App Router) + Tailwind, dark glass UI
 Panel data    MySQL 8.4 (sessions, apps, databases, domains, activity)
-Apps          Docker containers on the `caagil` bridge network
+Apps          Docker containers on the `caaqil` bridge network
 Routing       Traefik v3 + Let's Encrypt (HTTP-01), automatic HTTPS
 AI            OpenAI · Anthropic · DeepSeek via Vercel AI SDK, tool calling
 Deploy        docker compose up -d --build  (portable, single directory)
@@ -69,17 +69,24 @@ curl -fsSL …/bootstrap.sh | sudo bash -s -- panel.example.com you@example.com
 Re-running the same command updates the code and keeps `.env`, app data and the
 edge config. An install from before the rename, still in `/opt/caagil`, is moved
 to `/opt/caaqil` automatically (with `/opt/caagil` left as a symlink so running
-app containers keep their bind mounts). To install a fork or private mirror:
+app containers keep their bind mounts).
+
+## Upgrading an install made before the rename
+
+Installs created when the project was called Caagil keep their existing MySQL
+database and user, Docker volumes and network — the installer pins the old
+`caagil` names in `.env` so live data is never orphaned. New installs use the
+`caaqil` names everywhere. To install a fork or private mirror:
 
 ```bash
-CAAGIL_REPO=git@github.com:you/caaqil-host.git sudo -E bash scripts/bootstrap.sh
+CAAQIL_REPO=git@github.com:you/caaqil-host.git sudo -E bash scripts/bootstrap.sh
 ```
 
 Unattended provisioning (skip the wizard):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/caaqilyare/caaqil-host/main/scripts/bootstrap.sh -o /tmp/bootstrap.sh
-sudo CAAGIL_AUTO_ADMIN=true ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='a-long-password' \
+sudo CAAQIL_AUTO_ADMIN=true ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='a-long-password' \
   bash /tmp/bootstrap.sh panel.example.com you@example.com
 ```
 
@@ -157,7 +164,7 @@ Everything lives in `/opt/caaqil`:
 /opt/caaqil/.env                 secrets
 /opt/caaqil/edge/panel.yml       panel domain + IP routing (Traefik file provider)
 /opt/caaqil/data/sites/          app sources, bind-mounted into every app (Git or uploaded)
-Docker volumes: caagil-mysql, caagil-letsencrypt, caagil-db-<name>
+Docker volumes: caaqil-mysql, caaqil-letsencrypt, caaqil-db-<name>
 ```
 
 Move to another server:
@@ -165,17 +172,21 @@ Move to another server:
 ```bash
 # old host
 docker compose down
-tar czf caagil-backup.tgz .env docker-compose.yml edge data
-docker run --rm -v caagil-mysql:/v -v $PWD:/out alpine tar czf /out/mysql.tgz -C /v .
+tar czf caaqil-backup.tgz .env docker-compose.yml edge data
+docker run --rm -v caaqil-mysql:/v -v $PWD:/out alpine tar czf /out/mysql.tgz -C /v .
 
 # new host
-scp caagil-backup.tgz root@new-host:/opt/caaqil/
-cd /opt/caaqil && tar xzf caagil-backup.tgz
+scp caaqil-backup.tgz root@new-host:/opt/caaqil/
+cd /opt/caaqil && tar xzf caaqil-backup.tgz
 docker compose up -d --build
 ```
 
-Application data volumes (`caagil-db-*`) can be migrated the same way. DNS
+Application data volumes (`caaqil-db-*`) can be migrated the same way. DNS
 points at the new IP and certificates are re-issued automatically.
+
+> Installs from before the rename still use `caagil-mysql`, `caagil-letsencrypt`
+> and `caagil-db-*` volume names (and a `caagil` MySQL database). Substitute the
+> old names in the commands above for those hosts.
 
 ## SSL management (cPanel-style "Add SSL")
 

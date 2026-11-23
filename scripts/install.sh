@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Caagil server installer — run as root on Ubuntu/Debian.
+# Caaqil server installer — run as root on Ubuntu/Debian.
 # Creates swap, installs Docker, writes .env and boots the stack.
 set -euo pipefail
 
@@ -7,23 +7,23 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
 
 PANEL_DOMAIN="${PANEL_DOMAIN:-${1:-}}"
-PANEL_NAME="${PANEL_NAME:-Caagil}"
+PANEL_NAME="${PANEL_NAME:-Caaqil}"
 ACME_EMAIL="${ACME_EMAIL:-${2:-}}"
 PANEL_DOMAIN="$(printf '%s' "$PANEL_DOMAIN" | tr '[:upper:]' '[:lower:]')"
 if [ -n "$PANEL_DOMAIN" ] && [ -z "$ACME_EMAIL" ]; then
   ACME_EMAIL="admin@${PANEL_DOMAIN}"
 fi
 # The first visit creates the owner account. For unattended installs set
-# CAAGIL_AUTO_ADMIN=true together with ADMIN_EMAIL and ADMIN_PASSWORD.
+# CAAQIL_AUTO_ADMIN=true together with ADMIN_EMAIL and ADMIN_PASSWORD.
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
-AUTO_ADMIN="${CAAGIL_AUTO_ADMIN:-false}"
-DATA_DIR="${CAAGIL_DATA_DIR:-/opt/caaqil/data}"
-EDGE_DIR="${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}"
-ALLOW_IP="${CAAGIL_ALLOW_IP:-true}"
+AUTO_ADMIN="${CAAQIL_AUTO_ADMIN:-${CAAGIL_AUTO_ADMIN:-false}}"
+DATA_DIR="${CAAQIL_DATA_DIR:-${CAAGIL_DATA_DIR:-/opt/caaqil/data}}"
+EDGE_DIR="${CAAQIL_EDGE_DIR:-${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}}"
+ALLOW_IP="${CAAQIL_ALLOW_IP:-${CAAGIL_ALLOW_IP:-true}}"
 
-log() { printf '\033[1;32m[caagil]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[caagil]\033[0m %s\n' "$*"; }
+log() { printf '\033[1;32m[caaqil]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[caaqil]\033[0m %s\n' "$*"; }
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this script as root (sudo)." >&2
@@ -89,6 +89,24 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 # ── env ──────────────────────────────────────────────────────────
+# Installs created before the rename keep their existing MySQL database and
+# user, Docker volumes and network. Renaming those would orphan live data.
+if [ -f .env ] && ! grep -q '^CAAQIL_LAYOUT=caaqil' .env; then
+  log "keeping legacy database/volume/network names from the previous layout"
+  sed -i 's/^CAAGIL_/CAAQIL_/' .env
+  grep -q '^COMPOSE_PROJECT_NAME=' .env || echo "COMPOSE_PROJECT_NAME=caagil" >> .env
+  grep -q '^PANEL_NETWORK=' .env || echo "PANEL_NETWORK=caagil" >> .env
+  grep -q '^PANEL_DB_NAME=' .env || echo "PANEL_DB_NAME=caagil" >> .env
+  grep -q '^PANEL_DB_USER=' .env || echo "PANEL_DB_USER=caagil" >> .env
+  grep -q '^CAAQIL_MYSQL_VOLUME=' .env || echo "CAAQIL_MYSQL_VOLUME=caagil_caagil-mysql" >> .env
+  grep -q '^CAAQIL_LETSENCRYPT_VOLUME=' .env || echo "CAAQIL_LETSENCRYPT_VOLUME=caagil_caagil-letsencrypt" >> .env
+  echo "CAAQIL_LAYOUT=caaqil" >> .env
+  saved_dir="$(grep -m1 '^CAAQIL_DATA_DIR=' .env | cut -d= -f2- || true)"
+  saved_edge="$(grep -m1 '^CAAQIL_EDGE_DIR=' .env | cut -d= -f2- || true)"
+  if [ -n "$saved_dir" ]; then DATA_DIR="$saved_dir"; fi
+  if [ -n "$saved_edge" ]; then EDGE_DIR="$saved_edge"; fi
+fi
+
 mkdir -p "$DATA_DIR/sites" "$EDGE_DIR"
 if [ ! -f .env ]; then
   log "writing .env"
@@ -96,17 +114,18 @@ if [ ! -f .env ]; then
 AUTH_SECRET=$(openssl rand -hex 32)
 ADMIN_EMAIL=${ADMIN_EMAIL}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
-CAAGIL_AUTO_ADMIN=${AUTO_ADMIN}
+CAAQIL_AUTO_ADMIN=${AUTO_ADMIN}
 PANEL_DB_ROOT_PASSWORD=$(openssl rand -hex 18)
 PANEL_DB_PASSWORD=$(openssl rand -hex 18)
 PANEL_DOMAIN=${PANEL_DOMAIN}
 PANEL_NAME=${PANEL_NAME}
 ACME_EMAIL=${ACME_EMAIL}
-CAAGIL_DATA_DIR=${DATA_DIR}
-CAAGIL_EDGE_DIR=${EDGE_DIR}
+CAAQIL_DATA_DIR=${DATA_DIR}
+CAAQIL_EDGE_DIR=${EDGE_DIR}
 OPENAI_API_KEY=${OPENAI_API_KEY:-}
 ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
 DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+CAAQIL_LAYOUT=caaqil
 EOF
   chmod 600 .env
 else
@@ -138,43 +157,43 @@ if [ -z "$PANEL_DOMAIN" ] && [ "$allow_ip_effective" != "true" ]; then
   exit 1
 fi
 
-if [ -f "$EDGE_DIR/panel.yml" ] && [ "${CAAGIL_RESET_EDGE:-false}" != "true" ]; then
-  log "edge config already exists — keeping it (CAAGIL_RESET_EDGE=true regenerates)"
+if [ -f "$EDGE_DIR/panel.yml" ] && [ "${CAAQIL_RESET_EDGE:-${CAAGIL_RESET_EDGE:-false}}" != "true" ]; then
+  log "edge config already exists — keeping it (CAAQIL_RESET_EDGE=true regenerates)"
 else
   log "writing edge config for ${PANEL_DOMAIN:-http://$ip}"
   {
-    echo "# Managed by Caagil. Change this from Settings → Access in the panel."
+    echo "# Managed by Caaqil. Change this from Settings → Access in the panel."
     echo "http:"
     echo "  routers:"
     if [ -n "$PANEL_DOMAIN" ]; then
-      echo "    caagil-panel:"
+      echo "    caaqil-panel:"
       printf '      rule: "Host(`%s`)"\n' "$PANEL_DOMAIN"
       echo "      entryPoints: [websecure]"
-      echo "      service: caagil-panel"
+      echo "      service: caaqil-panel"
       echo "      priority: 150"
       echo "      tls:"
       echo "        certResolver: le"
-      echo "    caagil-panel-http:"
+      echo "    caaqil-panel-http:"
       printf '      rule: "Host(`%s`)"\n' "$PANEL_DOMAIN"
       echo "      entryPoints: [web]"
-      echo "      service: caagil-panel"
-      echo "      middlewares: [caagil-panel-https]"
+      echo "      service: caaqil-panel"
+      echo "      middlewares: [caaqil-panel-https]"
       echo "      priority: 150"
     fi
     if [ "$allow_ip_effective" = "true" ]; then
-      echo "    caagil-panel-ip:"
+      echo "    caaqil-panel-ip:"
       printf '      rule: "Host(`%s`)"\n' "$ip"
       echo "      entryPoints: [web]"
-      echo "      service: caagil-panel"
+      echo "      service: caaqil-panel"
       echo "      priority: 160"
     fi
     echo "  middlewares:"
-    echo "    caagil-panel-https:"
+    echo "    caaqil-panel-https:"
     echo "      redirectScheme:"
     echo "        scheme: https"
     echo "        permanent: true"
     echo "  services:"
-    echo "    caagil-panel:"
+    echo "    caaqil-panel:"
     echo "      loadBalancer:"
     echo "        servers:"
     echo '          - url: "http://panel:4000"'
@@ -210,7 +229,7 @@ fi
 
 cat <<EOF
 
-  Caagil is up.
+  Caaqil is up.
 
 ${panel_lines}${account_lines}    Data    ${DATA_DIR}
     Edge    ${EDGE_DIR}/panel.yml

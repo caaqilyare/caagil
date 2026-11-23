@@ -7,7 +7,7 @@ import { Button, Input } from "@/components/ui";
 
 export function SetupForm() {
   const router = useRouter();
-  const [panelName, setPanelName] = useState("Caagil");
+  const [panelName, setPanelName] = useState("Caaqil");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -49,7 +49,7 @@ export function SetupForm() {
           <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 shadow-glow">
             <Terminal size={22} className="text-ink-950" strokeWidth={2.6} />
           </span>
-          <h1 className="text-xl font-semibold tracking-tight text-white">Welcome to Caagil</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-white">Welcome to Caaqil</h1>
           <p className="mt-1 text-sm text-slate-400">
             Create the owner account. You can add a domain later in Settings.
           </p>
@@ -63,7 +63,7 @@ export function SetupForm() {
             <Input
               value={panelName}
               onChange={(e) => setPanelName(e.target.value)}
-              placeholder="Caagil"
+              placeholder="Caaqil"
               maxLength={40}
             />
           </div>

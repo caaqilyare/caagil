@@ -56,7 +56,7 @@ function q(value: string): string {
 
 export function renderPanelEdge(edge: PanelEdge): string {
   const lines: string[] = [
-    "# Managed by Caagil — edit this from Settings → Access, not by hand.",
+    "# Managed by Caaqil — edit this from Settings → Access, not by hand.",
     "# The owner of /edge must be writable by the panel container.",
     "http:",
   ];
@@ -67,10 +67,10 @@ export function renderPanelEdge(edge: PanelEdge): string {
   if (edge.domain) {
     routers.push(
       [
-        "    caagil-panel:",
+        "    caaqil-panel:",
         `      rule: ${q(`Host(\`${edge.domain}\`)`)}`,
         "      entryPoints: [websecure]",
-        "      service: caagil-panel",
+        "      service: caaqil-panel",
         "      priority: 150",
         "      tls:",
         "        certResolver: le",
@@ -78,16 +78,16 @@ export function renderPanelEdge(edge: PanelEdge): string {
     );
     routers.push(
       [
-        "    caagil-panel-http:",
+        "    caaqil-panel-http:",
         `      rule: ${q(`Host(\`${edge.domain}\`)`)}`,
         "      entryPoints: [web]",
-        "      service: caagil-panel",
-        "      middlewares: [caagil-panel-https]",
+        "      service: caaqil-panel",
+        "      middlewares: [caaqil-panel-https]",
         "      priority: 150",
       ].join("\n"),
     );
     middlewares.push(
-      ["    caagil-panel-https:", "      redirectScheme:", "        scheme: https", "        permanent: true"].join(
+      ["    caaqil-panel-https:", "      redirectScheme:", "        scheme: https", "        permanent: true"].join(
         "\n",
       ),
     );
@@ -96,10 +96,10 @@ export function renderPanelEdge(edge: PanelEdge): string {
   if (edge.allowIp && edge.ip) {
     routers.push(
       [
-        "    caagil-panel-ip:",
+        "    caaqil-panel-ip:",
         `      rule: ${q(`Host(\`${edge.ip}\`)`)}`,
         "      entryPoints: [web]",
-        "      service: caagil-panel",
+        "      service: caaqil-panel",
         "      priority: 160",
       ].join("\n"),
     );
@@ -110,7 +110,7 @@ export function renderPanelEdge(edge: PanelEdge): string {
 
   lines.push(
     "  services:",
-    "    caagil-panel:",
+    "    caaqil-panel:",
     "      loadBalancer:",
     "        servers:",
     '          - url: "http://panel:4000"',

@@ -4,7 +4,9 @@ import path from "node:path";
 const socketPath = process.env.DOCKER_SOCKET || "/var/run/docker.sock";
 
 export const docker = new Docker({ socketPath });
-export const NETWORK = process.env.PANEL_NETWORK || "caagil";
+export const NETWORK = process.env.PANEL_NETWORK || "caaqil";
+/** Name prefix used before the rename. Old containers are still cleaned up. */
+const LEGACY_PREFIX = "caagil-";
 export const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 /** Host path that maps to DATA_DIR, used for bind mounts into child containers. */
 export const HOST_DATA_DIR = process.env.HOST_DATA_DIR || DATA_DIR;
@@ -18,7 +20,7 @@ export async function ensureNetwork(): Promise<void> {
     await docker.createNetwork({
       Name: NETWORK,
       Driver: "bridge",
-      Labels: { "caagil.managed": "true" },
+      Labels: { "caaqil.managed": "true" },
     });
   }
 }
@@ -33,7 +35,7 @@ export async function dockerHealthy(): Promise<{ ok: boolean; error?: string }> 
 }
 
 export function containerName(name: string): string {
-  return `caagil-${name}`;
+  return `caaqil-${name}`;
 }
 
 export type TraefikRoute = {
@@ -60,7 +62,7 @@ export function traefikLabels(
 
   if (clean.length === 0) return {};
 
-  const service = `caagil-${id}`;
+  const service = `caaqil-${id}`;
   const labels: Record<string, string> = {
     "traefik.enable": "true",
     "traefik.docker.network": NETWORK,
@@ -124,7 +126,10 @@ export async function removeContainerSafe(
 ): Promise<void> {
   const candidates = new Set<string>();
   if (containerId) candidates.add(containerId);
-  if (name) candidates.add(containerName(name));
+  if (name) {
+    candidates.add(containerName(name));
+    candidates.add(`${LEGACY_PREFIX}${name}`);
+  }
 
   for (const id of candidates) {
     const container = docker.getContainer(id);
@@ -171,13 +176,15 @@ export async function runContainer(spec: AppContainerSpec) {
   await pullIfMissing(spec.image);
   const name = containerName(spec.name);
 
-  const existing = docker.getContainer(name);
-  try {
-    const info = await existing.inspect();
-    if (info.State?.Running) await existing.stop({ t: 5 }).catch(() => {});
-    await existing.remove({ force: true });
-  } catch {
-    /* not present */
+  for (const candidate of [name, `${LEGACY_PREFIX}${spec.name}`]) {
+    const existing = docker.getContainer(candidate);
+    try {
+      const info = await existing.inspect();
+      if (info.State?.Running) await existing.stop({ t: 5 }).catch(() => {});
+      await existing.remove({ force: true });
+    } catch {
+      /* not present */
+    }
   }
 
   const container = await docker.createContainer({
@@ -186,7 +193,7 @@ export async function runContainer(spec: AppContainerSpec) {
     Cmd: spec.command ? ["sh", "-lc", spec.command] : undefined,
     Env: Object.entries(spec.env ?? {}).map(([k, v]) => `${k}=${v}`),
     ExposedPorts: { [`${spec.port}/tcp`]: {} },
-    Labels: { "caagil.managed": "true", ...(spec.labels ?? {}) },
+    Labels: { "caaqil.managed": "true", ...(spec.labels ?? {}) },
     HostConfig: {
       RestartPolicy: { Name: "unless-stopped" },
       Binds: spec.binds ?? [],
