@@ -6,13 +6,13 @@
 # Environment overrides:
 #   CAAGIL_REPO   git URL (default: the public repo)
 #   CAAGIL_BRANCH branch (default: main)
-#   CAAGIL_DIR    install directory (default: /opt/caagil)
+#   CAAGIL_DIR    install directory (default: /opt/caaqil)
 #   CAAGIL_ALLOW_IP=false  disable the plain-HTTP IP fallback
 set -euo pipefail
 
 REPO="${CAAGIL_REPO:-https://github.com/caaqilyare/caagil.git}"
 BRANCH="${CAAGIL_BRANCH:-main}"
-DIR="${CAAGIL_DIR:-/opt/caagil}"
+DIR="${CAAGIL_DIR:-/opt/caaqil}"
 DOMAIN="${1:-${PANEL_DOMAIN:-}}"
 EMAIL="${2:-${ACME_EMAIL:-}}"
 
@@ -21,6 +21,27 @@ log() { printf '\033[1;32m[caagil]\033[0m %s\n' "$*"; }
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root: curl … | sudo bash -s -- panel.example.com you@example.com" >&2
   exit 1
+fi
+
+# ── legacy install directory ─────────────────────────────────────
+# Installs created before the repo was renamed live in /opt/caagil. Move
+# them instead of booting a second, empty install next to the running one.
+LEGACY_DIR="${CAAGIL_LEGACY_DIR:-/opt/caagil}"
+if [ "$DIR" != "$LEGACY_DIR" ] && [ ! -e "$DIR" ] && [ -d "$LEGACY_DIR" ]; then
+  log "moving existing install $LEGACY_DIR → $DIR"
+  if [ -f "$LEGACY_DIR/docker-compose.yml" ] && command -v docker >/dev/null 2>&1; then
+    ( cd "$LEGACY_DIR" && docker compose down --remove-orphans ) || true
+  fi
+  mkdir -p "$(dirname "$DIR")"
+  mv "$LEGACY_DIR" "$DIR"
+  # Keep the old path working: app containers are bound to /opt/caagil/data.
+  ln -s "$DIR" "$LEGACY_DIR"
+  if [ -f "$DIR/.env" ]; then
+    sed -i -e "s#^CAAGIL_DATA_DIR=.*#CAAGIL_DATA_DIR=$DIR/data#" \
+           -e "s#^CAAGIL_EDGE_DIR=.*#CAAGIL_EDGE_DIR=$DIR/edge#" "$DIR/.env"
+    grep -q '^CAAGIL_DATA_DIR=' "$DIR/.env" || echo "CAAGIL_DATA_DIR=$DIR/data" >> "$DIR/.env"
+    grep -q '^CAAGIL_EDGE_DIR=' "$DIR/.env" || echo "CAAGIL_EDGE_DIR=$DIR/edge" >> "$DIR/.env"
+  fi
 fi
 
 export DEBIAN_FRONTEND=noninteractive

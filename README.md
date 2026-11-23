@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/boot
   | sudo bash
 ```
 
-It clones the repo to `/opt/caagil`, adds 4 GB swap on small hosts, installs
+It clones the repo to `/opt/caaqil`, adds 4 GB swap on small hosts, installs
 Docker, generates secrets, writes the Traefik edge config, and boots the stack.
 
 **First visit:** open `http://SERVER-IP` and choose the owner username (or
@@ -67,7 +67,9 @@ curl -fsSL …/bootstrap.sh | sudo bash -s -- panel.example.com you@example.com
 ```
 
 Re-running the same command updates the code and keeps `.env`, app data and the
-edge config. To install a fork or private mirror:
+edge config. An install from before the rename, still in `/opt/caagil`, is moved
+to `/opt/caaqil` automatically (with `/opt/caagil` left as a symlink so running
+app containers keep their bind mounts). To install a fork or private mirror:
 
 ```bash
 CAAGIL_REPO=git@github.com:you/caagil.git sudo -E bash scripts/bootstrap.sh
@@ -93,7 +95,7 @@ Settings → Panel:
   sends the password unencrypted, so turn it off once HTTPS works.
 - **Panel name** — rebrand the UI.
 
-These write `/opt/caagil/edge/panel.yml`, which Traefik watches. No restart and
+These write `/opt/caaqil/edge/panel.yml`, which Traefik watches. No restart and
 no compose edits.
 
 ## Create an app (domain or path)
@@ -148,13 +150,13 @@ database and user too.
 
 ## Portability / migrating to another host
 
-Everything lives in `/opt/caagil`:
+Everything lives in `/opt/caaqil`:
 
 ```
-/opt/caagil/docker-compose.yml   stack definition
-/opt/caagil/.env                 secrets
-/opt/caagil/edge/panel.yml       panel domain + IP routing (Traefik file provider)
-/opt/caagil/data/sites/          app sources, bind-mounted into every app (Git or uploaded)
+/opt/caaqil/docker-compose.yml   stack definition
+/opt/caaqil/.env                 secrets
+/opt/caaqil/edge/panel.yml       panel domain + IP routing (Traefik file provider)
+/opt/caaqil/data/sites/          app sources, bind-mounted into every app (Git or uploaded)
 Docker volumes: caagil-mysql, caagil-letsencrypt, caagil-db-<name>
 ```
 
@@ -167,8 +169,8 @@ tar czf caagil-backup.tgz .env docker-compose.yml edge data
 docker run --rm -v caagil-mysql:/v -v $PWD:/out alpine tar czf /out/mysql.tgz -C /v .
 
 # new host
-scp caagil-backup.tgz root@new-host:/opt/caagil/
-cd /opt/caagil && tar xzf caagil-backup.tgz
+scp caagil-backup.tgz root@new-host:/opt/caaqil/
+cd /opt/caaqil && tar xzf caagil-backup.tgz
 docker compose up -d --build
 ```
 

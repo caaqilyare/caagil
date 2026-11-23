@@ -40,7 +40,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caagil-letsencrypt:/letsencrypt
-      - ${CAAGIL_EDGE_DIR:-/opt/caagil/edge}:/edge:ro
+      - ${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}:/edge:ro
     networks:
       - caagil
 
@@ -62,7 +62,7 @@ services:
       PANEL_DB_PASSWORD: ${PANEL_DB_PASSWORD}
       PANEL_DB_NAME: caagil
       DATA_DIR: /app/data
-      HOST_DATA_DIR: ${CAAGIL_DATA_DIR:-/opt/caagil/data}
+      HOST_DATA_DIR: ${CAAGIL_DATA_DIR:-/opt/caaqil/data}
       DOCKER_SOCKET: /var/run/docker.sock
       PANEL_NETWORK: caagil
       PANEL_DOMAIN: ${PANEL_DOMAIN}
@@ -74,8 +74,8 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${CAAGIL_DATA_DIR:-/opt/caagil/data}:/app/data
-      - ${CAAGIL_EDGE_DIR:-/opt/caagil/edge}:/edge
+      - ${CAAGIL_DATA_DIR:-/opt/caaqil/data}:/app/data
+      - ${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}:/edge
     networks:
       - caagil
 

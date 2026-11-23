@@ -18,8 +18,8 @@ fi
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 AUTO_ADMIN="${CAAGIL_AUTO_ADMIN:-false}"
-DATA_DIR="${CAAGIL_DATA_DIR:-/opt/caagil/data}"
-EDGE_DIR="${CAAGIL_EDGE_DIR:-/opt/caagil/edge}"
+DATA_DIR="${CAAGIL_DATA_DIR:-/opt/caaqil/data}"
+EDGE_DIR="${CAAGIL_EDGE_DIR:-/opt/caaqil/edge}"
 ALLOW_IP="${CAAGIL_ALLOW_IP:-true}"
 
 log() { printf '\033[1;32m[caagil]\033[0m %s\n' "$*"; }

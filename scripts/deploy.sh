@@ -6,7 +6,7 @@ set -euo pipefail
 TARGET="${1:-}"
 DOMAIN="${2:-}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REMOTE=/opt/caagil
+REMOTE=/opt/caaqil
 
 if [ -z "$TARGET" ]; then
   echo "Usage: ACME_EMAIL=you@example.com $0 user@server [panel.example.com]" >&2
