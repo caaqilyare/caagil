@@ -27,6 +27,7 @@ import {
   createAppDatabaseUser,
   dropAppDatabase,
   ensureWpConfigPrefix,
+  ensureWpPathRules,
   installWordPress,
   MYSQL_HOST,
   WP_PROXY_HTTPS,
@@ -684,6 +685,7 @@ async function syncWpPrefixEnv(app: AppRow): Promise<{ app: AppRow; changed: boo
     changed = true;
   }
   if (app.path_prefix) await ensureWpConfigPrefix(app.name);
+  if (app.path_prefix) await ensureWpPathRules(app);
 
   return { app: changed ? (await getApp(app.id))! : app, changed };
 }

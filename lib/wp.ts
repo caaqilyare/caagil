@@ -28,6 +28,84 @@ export function wpPrefixSnippet(_prefix?: string): string {
   );
 }
 
+/** MU plugin that removes the public path prefix from the rewrite rules
+ * WordPress writes into .htaccess. Traefik's StripPrefix middleware means
+ * Apache never sees /blog, so a rule targeting /blog/index.php can never
+ * resolve and Apache loops (AH00124: 10 internal redirects) on pretty
+ * permalinks such as /blog/sample-page/. The plugin makes WordPress write
+ * /index.php and `RewriteBase /` instead, which Apache can serve. */
+const WP_PATH_MU_PLUGIN = `<?php
+/**
+ * Plugin Name: Caaqil Path Prefix
+ * Description: Keeps rewrite rules working when the web server strips a /path prefix.
+ */
+add_filter( 'mod_rewrite_rules', function ( $rules ) {
+	$path = parse_url( home_url( '/' ), PHP_URL_PATH );
+	$path = is_string( $path ) ? '/' . trim( $path, '/' ) : '';
+	if ( '' === $path || '/' === $path ) {
+		return $rules;
+	}
+	$quoted = preg_quote( $path, '#' );
+	$rules  = preg_replace( '#^(\\s*RewriteBase\\s+)' . $quoted . '/?\\s*$#mi', '$1/', $rules );
+	$rules  = preg_replace( '#^(\\s*RewriteRule\\s+\\S+\\s+)' . $quoted . '/#mi', '$1/', $rules );
+	return $rules;
+} );
+`;
+
+/** Strip the public path prefix from the rewrite targets in existing
+ * .htaccess content (mirrors the MU plugin above). */
+function stripHomePathFromRules(rules: string, prefix: string): string {
+  if (!prefix) return rules;
+  const quoted = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return rules
+    .replace(new RegExp(`^(\\s*RewriteBase\\s+)${quoted}/?\\s*$`, "gmi"), "$1/")
+    .replace(new RegExp(`^(\\s*RewriteRule\\s+\\S+\\s+)${quoted}/`, "gmi"), "$1/");
+}
+
+/** Keep pretty permalinks working for a stripped path route. Writes the path
+ * MU plugin and repairs an .htaccess generated before the plugin existed. */
+export async function ensureWpPathRules(app: {
+  name: string;
+  path_prefix: string | null;
+  strip_prefix?: number | string | null;
+}): Promise<void> {
+  if (!app.path_prefix) return;
+  if (app.strip_prefix !== undefined && Number(app.strip_prefix) === 0) return;
+
+  const root = path.join(HOST_SITES_DIR, app.name);
+  // Only patch real WordPress trees (wp-load.php appears after the container
+  // entrypoint has unpacked WordPress).
+  try {
+    await fs.access(path.join(root, "wp-load.php"));
+  } catch {
+    return;
+  }
+
+  const muDir = path.join(root, "wp-content", "mu-plugins");
+  const pluginFile = path.join(muDir, "caaqil-path.php");
+  try {
+    await fs.mkdir(muDir, { recursive: true });
+    const existing = await fs.readFile(pluginFile, "utf8").catch(() => "");
+    if (existing !== WP_PATH_MU_PLUGIN) {
+      await fs.writeFile(pluginFile, WP_PATH_MU_PLUGIN);
+      await fs.chmod(pluginFile, 0o644).catch(() => {});
+      // The panel runs as root; keep WordPress able to manage its own files.
+      await fs.chown(pluginFile, 33, 33).catch(() => {});
+    }
+  } catch {
+    return; // not writable — leave the current rules alone
+  }
+
+  const htaccess = path.join(root, ".htaccess");
+  try {
+    const rules = await fs.readFile(htaccess, "utf8");
+    const fixed = stripHomePathFromRules(rules, app.path_prefix.replace(/\/+$/, ""));
+    if (fixed !== rules) await fs.writeFile(htaccess, fixed);
+  } catch {
+    /* no .htaccess yet — WordPress writes one through the MU plugin filter */
+  }
+}
+
 /** Removes prefix snippets injected by older panel versions (hardcoded prefix). */
 function stripPrefixSnippets(cfg: string): string {
   return cfg
@@ -282,6 +360,7 @@ export async function installWordPress(
   // container entrypoint writes wp-config.php with the eval block).
   if (app.path_prefix) {
     await ensureWpConfigPrefix(app.name);
+    await ensureWpPathRules(app);
     await restartAppContainer(app.container_id);
   }
   const title = input.title?.trim() || app.name;
@@ -336,6 +415,10 @@ export async function installWordPress(
   } finally {
     await container.remove({ force: true }).catch(() => {});
   }
+
+  // The installer may have written .htaccess before the MU plugin existed, and
+  // the plugin itself can only be dropped once WordPress files are on disk.
+  if (app.path_prefix) await ensureWpPathRules(app);
 
   return { url, adminUser };
 }
