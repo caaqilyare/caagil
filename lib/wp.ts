@@ -7,7 +7,7 @@ import type { Readable } from "node:stream";
 import fs from "node:fs/promises";
 import path from "node:path";
 import Docker from "dockerode";
-import { containerLogs, docker, HOST_SITES_DIR, NETWORK, pullIfMissing } from "./docker";
+import { containerLogs, docker, HOST_SITES_DIR, NETWORK, pullIfMissing, SITES_DIR } from "./docker";
 import { randomId, shortPassword } from "./crypto";
 
 const WP_CLI_IMAGE = "wordpress:cli";
@@ -72,7 +72,7 @@ export async function ensureWpPathRules(app: {
   if (!app.path_prefix) return;
   if (app.strip_prefix !== undefined && Number(app.strip_prefix) === 0) return;
 
-  const root = path.join(HOST_SITES_DIR, app.name);
+  const root = path.join(SITES_DIR, app.name);
   // Only patch real WordPress trees (wp-load.php appears after the container
   // entrypoint has unpacked WordPress).
   try {
@@ -261,7 +261,7 @@ async function restartAppContainer(containerId: string | null): Promise<void> {
  * WORDPRESS_CONFIG_EXTRA at runtime we rely on that env instead (see
  * syncWpPrefixEnv in ops.ts) and only strip stale hardcoded snippets here. */
 export async function ensureWpConfigPrefix(appName: string): Promise<void> {
-  const wpConfig = path.join(HOST_SITES_DIR, appName, "wp-config.php");
+  const wpConfig = path.join(SITES_DIR, appName, "wp-config.php");
   let cfg: string;
   try {
     cfg = await fs.readFile(wpConfig, "utf8");
