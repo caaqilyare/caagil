@@ -48,7 +48,7 @@ Requirements: Ubuntu/Debian, root SSH, 1.5 GB RAM, 15 GB+ disk. Point a DNS
 `A` record at the server first (or use the automatic IP fallback).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/bootstrap.sh \
+curl -fsSL https://raw.githubusercontent.com/caaqilyare/caaqil-host/main/scripts/bootstrap.sh \
   | sudo bash
 ```
 
@@ -72,13 +72,13 @@ to `/opt/caaqil` automatically (with `/opt/caagil` left as a symlink so running
 app containers keep their bind mounts). To install a fork or private mirror:
 
 ```bash
-CAAGIL_REPO=git@github.com:you/caagil.git sudo -E bash scripts/bootstrap.sh
+CAAGIL_REPO=git@github.com:you/caaqil-host.git sudo -E bash scripts/bootstrap.sh
 ```
 
 Unattended provisioning (skip the wizard):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/bootstrap.sh -o /tmp/bootstrap.sh
+curl -fsSL https://raw.githubusercontent.com/caaqilyare/caaqil-host/main/scripts/bootstrap.sh -o /tmp/bootstrap.sh
 sudo CAAGIL_AUTO_ADMIN=true ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='a-long-password' \
   bash /tmp/bootstrap.sh panel.example.com you@example.com
 ```

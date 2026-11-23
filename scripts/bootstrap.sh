@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-step installer for a fresh Ubuntu/Debian server.
 #
-#   curl -fsSL https://raw.githubusercontent.com/caaqilyare/caagil/main/scripts/bootstrap.sh | sudo bash -s -- panel.example.com you@example.com
+#   curl -fsSL https://raw.githubusercontent.com/caaqilyare/caaqil-host/main/scripts/bootstrap.sh | sudo bash -s -- panel.example.com you@example.com
 #
 # Environment overrides:
 #   CAAGIL_REPO   git URL (default: the public repo)
@@ -10,7 +10,7 @@
 #   CAAGIL_ALLOW_IP=false  disable the plain-HTTP IP fallback
 set -euo pipefail
 
-REPO="${CAAGIL_REPO:-https://github.com/caaqilyare/caagil.git}"
+REPO="${CAAGIL_REPO:-https://github.com/caaqilyare/caaqil-host.git}"
 BRANCH="${CAAGIL_BRANCH:-main}"
 DIR="${CAAGIL_DIR:-/opt/caaqil}"
 DOMAIN="${1:-${PANEL_DOMAIN:-}}"
