@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: `${process.env.NEXT_PUBLIC_PANEL_NAME || "Caaqil"} · Hosting Panel`,
-  description: "A small, fast, AI-native hosting control panel.",
+  description: "A fast, AI-native hosting control panel.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

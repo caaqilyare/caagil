@@ -22,7 +22,7 @@ export const PRESETS: RuntimePreset[] = [
     port: 80,
     mountPath: "/var/www/html",
     docRoot: "/var/www/html",
-    description: "Apache + mod_php. Good for classic PHP sites and small frameworks.",
+    description: "Apache + mod_php. Good for classic PHP sites and lightweight frameworks.",
   },
   {
     id: "php83",

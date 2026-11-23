@@ -1,5 +1,5 @@
 /**
- * Self-update support. The panel container owns no checkout, so a small
+ * Self-update support. The panel container owns no checkout, so an
  * `updater` sidecar has the git repo and Docker CLI mounted. The panel talks
  * to it through `docker exec`, which keeps the update alive while the panel
  * container itself is recreated.

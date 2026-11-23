@@ -1,6 +1,6 @@
 # Caaqil
 
-A small, fast, AI-native hosting control panel. One container, one MySQL, one
+A fast, AI-native hosting control panel. One container, one MySQL, one
 Traefik — it deploys PHP, Node.js and static sites, runs databases with optional
 public access, and ships an AI operator that can actually do the work.
 
@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/caaqilyare/caaqil-host/main/scripts
   | sudo bash
 ```
 
-It clones the repo to `/opt/caaqil`, adds 4 GB swap on small hosts, installs
+It clones the repo to `/opt/caaqil`, adds 4 GB swap on hosts with limited RAM, installs
 Docker, generates secrets, writes the Traefik edge config, and boots the stack.
 
 **First visit:** open `http://SERVER-IP` and choose the owner username (or
@@ -107,7 +107,7 @@ no compose edits.
 
 ## Update the panel from GitHub
 
-Every install includes a small `updater` sidecar with the git checkout and the
+Every install includes an `updater` sidecar with the git checkout and the
 Docker socket mounted. **Settings → Panel updates** checks `origin/main` every
 few minutes (and on demand with the refresh icon):
 
