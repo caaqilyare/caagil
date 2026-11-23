@@ -26,6 +26,7 @@ import {
   createAppDatabase,
   createAppDatabaseUser,
   dropAppDatabase,
+  ensureWpConfigPrefix,
   installWordPress,
   MYSQL_HOST,
   WP_PROXY_HTTPS,
@@ -137,7 +138,9 @@ const RESERVED_PATHS = new Set([
 ]);
 
 export function normalizePath(input: string): string {
-  const path = input.trim().toLowerCase().replace(/\/+$/, "");
+  const trimmed = input.trim().toLowerCase();
+  const withSlash = trimmed && !trimmed.startsWith("/") ? `/${trimmed}` : trimmed;
+  const path = withSlash.replace(/\/+$/, "");
   if (!/^\/[a-z0-9][a-z0-9._-]{0,60}$/.test(path)) {
     throw new Error("Path must look like /name — a leading slash, letters, numbers, dot, dash or underscore.");
   }
@@ -389,6 +392,29 @@ export async function createApp(
   const port = Number(input.port || preset.port);
   const env = { ...(preset.env ?? {}), ...(input.env ?? {}) };
 
+  // Path route (explicit, or a default /<name> route for WordPress) must be
+  // resolved BEFORE the WordPress env block so a fresh app gets the prefix
+  // snippet in WORDPRESS_CONFIG_EXTRA from its very first request.
+  let pathPrefix = input.pathPrefix ? normalizePath(input.pathPrefix) : null;
+  let pathHost = input.pathHost?.trim().toLowerCase() || null;
+  if (pathPrefix && !pathHost) pathHost = await defaultRouteHost();
+
+  const isWp = preset.id === "wordpress" || /wordpress/i.test(image);
+  const autoWp = isWp && input.wp?.autoInstall !== false;
+  if (autoWp && !primaryHost && !pathPrefix) {
+    const host = await defaultRouteHost();
+    if (host && !RESERVED_PATHS.has(name)) {
+      const clash = await one("SELECT id FROM apps WHERE path_prefix = ? AND path_host <=> ?", [
+        `/${name}`,
+        host,
+      ]);
+      if (!clash) {
+        pathPrefix = `/${name}`;
+        pathHost = host;
+      }
+    }
+  }
+
   // Plain Apache presets serving a Laravel-style repository: point the
   // document root at <dir>/public so the framework's real entry point works.
   let command = input.command ?? preset.command ?? null;
@@ -414,15 +440,14 @@ export async function createApp(
 
   // WordPress one-click: a managed database on the panel MySQL server plus
   // reverse-proxy HTTPS detection — unless the user wired their own DB env.
-  const isWp = preset.id === "wordpress" || /wordpress/i.test(image);
-  const autoWp = isWp && input.wp?.autoInstall !== false;
   let wpDb: { name: string; username: string; password: string; host: string } | null = null;
   if (isWp) {
     // HTTPS + path-prefix aware wp-config.php snippet (appended to whatever
     // custom config the user wired through the env textarea).
     let extra = env.WORDPRESS_CONFIG_EXTRA && env.WORDPRESS_CONFIG_EXTRA.trim() ? env.WORDPRESS_CONFIG_EXTRA : WP_PROXY_HTTPS;
-    const wpPrefix = input.pathPrefix ? normalizePath(input.pathPrefix) : null;
-    if (wpPrefix) extra += "\n" + wpPrefixSnippet(wpPrefix);
+    if (pathPrefix && !extra.includes("HTTP_X_FORWARDED_PREFIX")) {
+      extra += "\n" + wpPrefixSnippet();
+    }
     env.WORDPRESS_CONFIG_EXTRA = extra;
     if (!env.WORDPRESS_DB_HOST) {
       report?.("database", "active");
@@ -436,25 +461,6 @@ export async function createApp(
       env.WORDPRESS_DB_NAME = wpDb.name;
       env.WORDPRESS_DB_USER = wpDb.username;
       env.WORDPRESS_DB_PASSWORD = wpDb.password;
-    }
-  }
-
-  // Path route: explicit from the user, or a default /<name> route so a
-  // WordPress app gets a working URL immediately.
-  let pathPrefix = input.pathPrefix ? normalizePath(input.pathPrefix) : null;
-  let pathHost = input.pathHost?.trim().toLowerCase() || null;
-  if (pathPrefix && !pathHost) pathHost = await defaultRouteHost();
-  if (autoWp && !primaryHost && !pathPrefix) {
-    const host = await defaultRouteHost();
-    if (host && !RESERVED_PATHS.has(name)) {
-      const clash = await one("SELECT id FROM apps WHERE path_prefix = ? AND path_host <=> ?", [
-        `/${name}`,
-        host,
-      ]);
-      if (!clash) {
-        pathPrefix = `/${name}`;
-        pathHost = host;
-      }
     }
   }
 
@@ -623,6 +629,8 @@ export async function startWpInstall(
   void (async () => {
     try {
       jobStep(jobId, "connect", "active");
+      const synced = await syncWpPrefixEnv((await getApp(app.id))!);
+      if (synced.changed) await applyApp(synced.app);
       const fresh = (await getApp(app.id))!;
       jobStep(jobId, "connect", "done", fresh.status);
       jobStep(jobId, "wp", "active", "wp-cli is working…");
@@ -638,6 +646,46 @@ export async function startWpInstall(
   })();
 
   return { job: jobId };
+}
+
+/**
+ * Keep a WordPress app's path prefix alive: inject the generic
+ * X-Forwarded-Prefix snippet into WORDPRESS_CONFIG_EXTRA (used by the
+ * container entrypoint's wp-config eval block) and clean/patch wp-config.php
+ * for static configs. Runs on route changes, redeploys and WP installs so an
+ * app mounted at /blog (or /munasar) keeps the prefix in wp-admin.
+ */
+async function syncWpPrefixEnv(app: AppRow): Promise<{ app: AppRow; changed: boolean }> {
+  const isWp = /wordpress/i.test(`${app.runtime} ${app.image}`);
+  if (!isWp) return { app, changed: false };
+
+  const env = { ...parseEnv(app.env) };
+  const extra = (env.WORDPRESS_CONFIG_EXTRA ?? "").trim() || WP_PROXY_HTTPS;
+  // Upgrade the old hardcoded-prefix snippet to the generic header-driven one
+  // (older versions pinned the route, so a later route change stopped working).
+  const hasGeneric = extra.includes("!empty($_SERVER['HTTP_X_FORWARDED_PREFIX'])");
+  const legacyLines = extra.includes("HTTP_X_FORWARDED_PREFIX")
+    ? extra
+        .split("\n")
+        .filter((line) => !line.includes("HTTP_X_FORWARDED_PREFIX"))
+        .join("\n")
+        .trim() || WP_PROXY_HTTPS
+    : extra;
+  const needsSnippet = Boolean(app.path_prefix) && !hasGeneric;
+
+  let changed = false;
+  if (needsSnippet) {
+    env.WORDPRESS_CONFIG_EXTRA = `${legacyLines}\n${wpPrefixSnippet()}`;
+    await execute("UPDATE apps SET env = ?, updated_at = ? WHERE id = ?", [
+      JSON.stringify(env),
+      Date.now(),
+      app.id,
+    ]);
+    changed = true;
+  }
+  if (app.path_prefix) await ensureWpConfigPrefix(app.name);
+
+  return { app: changed ? (await getApp(app.id))! : app, changed };
 }
 
 /** Mount an app under a path prefix (e.g. https://panel.example.com/blog). */
@@ -667,14 +715,17 @@ export async function setAppRoute(
     "UPDATE apps SET path_prefix = ?, path_host = ?, strip_prefix = ?, updated_at = ? WHERE id = ?",
     [path, host, input.strip === false ? 0 : 1, Date.now(), app.id],
   );
-  await applyApp((await getApp(app.id))!);
+  const synced = await syncWpPrefixEnv((await getApp(app.id))!);
+  await applyApp(synced.app);
   await logActivity("app.route", `${app.name} → ${host ?? "-"}${path ?? ""}`, actor);
   return (await getApp(app.id))!;
 }
 
-export async function redeployApp(id: string, actor = "system") {  const app = await getApp(id);
-  if (!app) throw new Error("App not found");
-  if (app.git_url) await cloneOrPull(app.git_url, app.branch, app.name);
+export async function redeployApp(id: string, actor = "system") {
+  const initial = await getApp(id);
+  if (!initial) throw new Error("App not found");
+  if (initial.git_url) await cloneOrPull(initial.git_url, initial.branch, initial.name);
+  const { app } = await syncWpPrefixEnv(initial);
   await applyApp(app);
   await logActivity("app.redeploy", app.name, actor);
   return (await getApp(id))!;
@@ -768,7 +819,10 @@ export async function installWordPressForApp(
   if (!/wordpress/i.test(`${app.runtime} ${app.image}`)) {
     throw new Error("WP install only applies to WordPress apps.");
   }
-  const res = await installWordPress(app, input);
+  const synced = await syncWpPrefixEnv(app);
+  if (synced.changed) await applyApp(synced.app);
+  const fresh = (await getApp(app.id))!;
+  const res = await installWordPress(fresh, input);
   await logActivity("wp.install", `${app.name} → ${res.url} (admin: ${res.adminUser})`, actor);
   return { ok: true, url: res.url, adminUser: res.adminUser };
 }

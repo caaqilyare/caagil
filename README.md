@@ -23,7 +23,7 @@ Deploy        docker compose up -d --build  (portable, single directory)
 | Databases | MySQL, MariaDB, PostgreSQL, MongoDB, Redis — on the internal network as `db-<name>` |
 | Remote DB | Publish a public port + `'user'@'%'` grant, or attach an external MySQL and query it read-only |
 | Domains | Pick an existing domain or type a new one; attach many hostnames per app; auto certificates |
-| Path routing | Mount an app under `/name` on the panel domain (or any host), e.g. `https://panel.example.com/blog` |
+| Path routing | Mount an app under `/name` on the panel domain (or any host), e.g. `https://panel.example.com/blog` — WordPress keeps the prefix in `wp-admin` and auth redirects |
 | Files | Built-in file manager per app: browse, edit, upload, rename and delete `data/sites/<app>` |
 | Access | Change the panel domain, rename the panel, or reach it at `http://IP` — all from Settings, no compose edits |
 | AI operator | Chat agent with 13 tools: create/delete apps, databases, domains, mount paths, read logs, system stats |

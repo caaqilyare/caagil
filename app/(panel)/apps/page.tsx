@@ -190,12 +190,12 @@ export default function AppsPage() {
                       {app.path_prefix}
                     </a>
                   )}
-                  {isWpApp(app) && (
+                  {isWpApp(app) && (app.domain || app.path_prefix) && (
                     <a
                       href={
                         app.domain
-                          ? `https://${app.domain}/wp-admin`
-                          : `https://${app.path_host}${app.path_prefix}/wp-admin`
+                          ? `https://${app.domain}/wp-admin/`
+                          : `https://${app.path_host}${app.path_prefix}/wp-admin/`
                       }
                       target="_blank"
                       rel="noreferrer"
@@ -555,7 +555,7 @@ function CreateAppModal({
             )}
             {isWp && wpAuto && siteUrl && (
               <a
-                href={`${siteUrl}/wp-admin`}
+                href={`${siteUrl.replace(/\/+$/, "")}/wp-admin/`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-amber-300 hover:underline"
@@ -1238,7 +1238,7 @@ function WpInstallModal({
           </div>
           <div className="flex justify-end gap-2">
             <a
-              href={`${jobResult.url}/wp-admin`}
+              href={`${(jobResult.url ?? "").replace(/\/+$/, "")}/wp-admin/`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/5"

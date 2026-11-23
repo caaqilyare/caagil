@@ -18,13 +18,45 @@ export const WP_PROXY_HTTPS =
   "if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') !== false) { $_SERVER['HTTPS'] = 'on'; }";
 
 /** Rewrites $_SERVER['REQUEST_URI'] so WordPress keeps the public path prefix
- * behind a stripped path route (e.g. /blog → REQUEST_URI /blog/wp-admin/…). */
-export function wpPrefixSnippet(prefix: string): string {
-  const p = prefix.startsWith("/") ? prefix : `/${prefix}`;
+ * behind a stripped path route (e.g. /blog → REQUEST_URI /blog/wp-admin/…).
+ * The header value is used directly, so changing the route prefix later keeps
+ * working without editing wp-config.php again. */
+export function wpPrefixSnippet(_prefix?: string): string {
   return (
-    `if (isset($_SERVER['HTTP_X_FORWARDED_PREFIX']) && strpos($_SERVER['HTTP_X_FORWARDED_PREFIX'], '${p}') === 0) {` +
-    ` $_SERVER['REQUEST_URI'] = $_SERVER['HTTP_X_FORWARDED_PREFIX'] . $_SERVER['REQUEST_URI']; }`
+    `if (!empty($_SERVER['HTTP_X_FORWARDED_PREFIX'])) {` +
+    ` $_SERVER['REQUEST_URI'] = rtrim($_SERVER['HTTP_X_FORWARDED_PREFIX'], '/') . $_SERVER['REQUEST_URI']; }`
   );
+}
+
+/** Removes prefix snippets injected by older panel versions (hardcoded prefix). */
+function stripPrefixSnippets(cfg: string): string {
+  return cfg
+    .replace(
+      /^if \(isset\(\$_SERVER\['HTTP_X_FORWARDED_PREFIX'\]\)[^\n]*\n(?:[^\n]*\n)?\}\n?/gm,
+      "",
+    )
+    .replace(
+      /^if \(!empty\(\$_SERVER\['HTTP_X_FORWARDED_PREFIX'\]\)\)[^\n]*\n?/gm,
+      "",
+    );
+}
+
+/** True when the image's wp-config reads WORDPRESS_CONFIG_EXTRA at runtime. */
+function hasConfigExtraEval(cfg: string): boolean {
+  return /\$configExtra\s*=\s*getenv_docker\(\s*['"]WORDPRESS_CONFIG_EXTRA['"]/.test(cfg);
+}
+
+/** Place a PHP statement before WordPress boots. */
+function insertBeforeWpSettings(cfg: string, snippet: string): string {
+  const stop = /\/\* That's all, stop editing!/;
+  if (stop.test(cfg)) {
+    return cfg.replace(stop, (marker) => `${snippet}\n\n${marker}`);
+  }
+  const require = /(require_once\s+ABSPATH\s*\.\s*['"]wp-settings\.php['"];)/;
+  if (require.test(cfg)) {
+    return cfg.replace(require, (_match, line: string) => `${snippet}\n${line}`);
+  }
+  return `${cfg.trimEnd()}\n\n${snippet}\n`;
 }
 
 async function mysqlContainer() {
@@ -145,8 +177,12 @@ async function restartAppContainer(containerId: string | null): Promise<void> {
   }
 }
 
-/** Ensure wp-config.php keeps the public path prefix for existing installs: ... */
-async function ensureWpConfigPrefix(appName: string, prefix: string): Promise<void> {
+/** Ensure wp-config.php keeps the public path prefix for existing installs.
+ * The snippet is generic (driven by the X-Forwarded-Prefix header), so it
+ * follows route changes. When the image's wp-config evaluates
+ * WORDPRESS_CONFIG_EXTRA at runtime we rely on that env instead (see
+ * syncWpPrefixEnv in ops.ts) and only strip stale hardcoded snippets here. */
+export async function ensureWpConfigPrefix(appName: string): Promise<void> {
   const wpConfig = path.join(HOST_SITES_DIR, appName, "wp-config.php");
   let cfg: string;
   try {
@@ -154,16 +190,16 @@ async function ensureWpConfigPrefix(appName: string, prefix: string): Promise<vo
   } catch {
     return; // no wp-config yet — the container entrypoint will write it from env
   }
-  const marker = "HTTP_X_FORWARDED_PREFIX";
-  if (cfg.includes(marker)) return; // already patched
-  const snip = [
-    `if (isset($_SERVER['HTTP_X_FORWARDED_PREFIX']) && strpos($_SERVER['HTTP_X_FORWARDED_PREFIX'], '${prefix}') === 0) {`,
-    "\t$_SERVER['REQUEST_URI'] = $_SERVER['HTTP_X_FORWARDED_PREFIX'] . $_SERVER['REQUEST_URI'];",
-    "}",
-  ].join("\n");
-  const oldBlock = `if ($configExtra = getenv_docker('WORDPRESS_CONFIG_EXTRA', '')) {\n\teval($configExtra);\n}`;
-  const body = cfg.includes(oldBlock) ? cfg.replace(oldBlock, oldBlock + "\n" + snip) : cfg + "\n\n" + snip;
-  await fs.writeFile(wpConfig, body);
+
+  const cleaned = stripPrefixSnippets(cfg);
+  if (hasConfigExtraEval(cleaned)) {
+    // Env drives the prefix — just persist the cleanup of old snippets.
+    if (cleaned !== cfg) await fs.writeFile(wpConfig, cleaned);
+    return;
+  }
+
+  const body = insertBeforeWpSettings(cleaned, wpPrefixSnippet());
+  if (body !== cfg) await fs.writeFile(wpConfig, body);
 }
 
 export type WpInstallInput = {
@@ -240,12 +276,12 @@ export async function installWordPress(
     );
   }
 
-  // Older installs (and installs created before the X-Forwarded-Prefix fix)
-  // keep a wp-config.php without the path-prefix snippet — patch it in so
-  // wp-admin behind a path route keeps the prefix.
-  const wpPrefix = app.path_prefix ? (app.path_prefix.startsWith("/") ? app.path_prefix : `/${app.path_prefix}`) : null;
-  if (wpPrefix) {
-    await ensureWpConfigPrefix(app.name, wpPrefix);
+  // Existing installs created before the X-Forwarded-Prefix fix keep a
+  // wp-config.php without the prefix snippet — patch it in so wp-admin behind
+  // a path route keeps the prefix. Fresh installs get it via the env (the
+  // container entrypoint writes wp-config.php with the eval block).
+  if (app.path_prefix) {
+    await ensureWpConfigPrefix(app.name);
     await restartAppContainer(app.container_id);
   }
   const title = input.title?.trim() || app.name;
