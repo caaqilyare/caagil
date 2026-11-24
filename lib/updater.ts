@@ -295,6 +295,13 @@ if grep -q '^CAAQIL_COMMIT=' .env 2>/dev/null; then
 else
   echo "CAAQIL_COMMIT=$COMMIT" >> .env
 fi
+
+# Clean up orphaned images, dangling layers and build caches to prevent disk exhaustion
+echo "== freeing disk space: pruning dangling images and build cache"
+docker image prune -f --filter "dangling=true" 2>/dev/null || true
+docker builder prune -f --keep-storage 250MB 2>/dev/null || true
+docker container prune -f 2>/dev/null || true
+
 echo "== done $(date -u +%FT%TZ) — running $COMMIT"
 echo done > ${STATE_FILE}
 `;

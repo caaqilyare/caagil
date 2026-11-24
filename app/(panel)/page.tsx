@@ -101,7 +101,7 @@ export default function OverviewPage() {
       <div className="pointer-events-none absolute top-96 left-10 h-64 w-64 rounded-full bg-purple-500/10 blur-[110px]" />
 
       {/* Hero Glass Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-ink-900/70 via-ink-900/40 to-ink-950/60 p-6 sm:p-7 shadow-[0_12px_40px_0_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-2xl">
+      <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-white/[0.09] via-white/[0.04] to-white/[0.02] p-6 sm:p-7 shadow-[0_16px_50px_0_rgba(0,0,0,0.5),inset_0_1px_1px_0_rgba(255,255,255,0.25)] backdrop-blur-3xl">
         {/* Subtle glass reflection highlight on top */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent" />
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br from-brand-400/15 via-sky-400/10 to-transparent blur-3xl" />
@@ -263,7 +263,7 @@ export default function OverviewPage() {
       {/* Main Glass Split: Applications Hub & System Activity Feed */}
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Left Column: Applications Table Glass Card */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/[0.09] bg-ink-900/40 p-6 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.08)] lg:col-span-3">
+        <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-white/[0.01] p-6 backdrop-blur-3xl shadow-[0_16px_50px_0_rgba(0,0,0,0.5),inset_0_1px_1px_0_rgba(255,255,255,0.22)] lg:col-span-3">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
           <div className="mb-5 flex items-center justify-between">
@@ -368,7 +368,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Right Column: Live Activity Feed Glass Card */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/[0.09] bg-ink-900/40 p-6 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.08)] lg:col-span-2">
+        <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-white/[0.01] p-6 backdrop-blur-3xl shadow-[0_16px_50px_0_rgba(0,0,0,0.5),inset_0_1px_1px_0_rgba(255,255,255,0.22)] lg:col-span-2">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
           <div className="mb-5 flex items-center justify-between">

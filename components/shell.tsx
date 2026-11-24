@@ -115,16 +115,21 @@ export function Shell({
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/5 bg-ink-900/40 px-3 py-4 backdrop-blur-xl lg:flex">
+    <div className="relative flex min-h-screen overflow-hidden bg-[#060a11]">
+      {/* Dynamic ambient lights that make frosted glass visible and breathtaking across the layout */}
+      <div className="pointer-events-none fixed -top-40 left-10 h-[650px] w-[650px] rounded-full bg-gradient-to-br from-emerald-500/22 via-teal-500/12 to-transparent blur-[140px] -z-10" />
+      <div className="pointer-events-none fixed top-1/4 right-0 h-[650px] w-[650px] rounded-full bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-transparent blur-[140px] -z-10" />
+      <div className="pointer-events-none fixed -bottom-32 left-1/3 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-purple-500/18 via-indigo-500/10 to-transparent blur-[140px] -z-10" />
+
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-ink-950/40 px-3 py-4 backdrop-blur-3xl shadow-[4px_0_30px_rgba(0,0,0,0.5)] lg:flex">
         <Link href="/" className="mb-6 flex items-center gap-2.5 px-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 shadow-glow">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 via-emerald-400 to-teal-500 shadow-[0_0_20px_rgba(52,224,161,0.5)]">
             <Terminal size={17} className="text-ink-950" strokeWidth={2.6} />
           </span>
           <span>
-            <span className="block text-sm font-semibold tracking-tight text-white">{panelName}</span>
-            <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-500">
-              hosting panel
+            <span className="block text-sm font-bold tracking-tight text-white">{panelName}</span>
+            <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-400 font-mono">
+              cloud panel
             </span>
           </span>
         </Link>
@@ -132,7 +137,7 @@ export function Shell({
         <nav className="flex-1 space-y-3 overflow-y-auto">
           {NAV_GROUPS.map((group) => (
             <div key={group.group}>
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 {group.group}
               </p>
               <div className="space-y-0.5">
@@ -143,10 +148,10 @@ export function Shell({
                       key={item.href}
                       href={item.href}
                       className={cn(
-                        "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition",
+                        "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all duration-200",
                         active
-                          ? "bg-white/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.06)]"
-                          : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
+                          ? "bg-gradient-to-r from-emerald-500/20 via-brand-500/15 to-teal-500/10 text-emerald-200 border border-emerald-400/30 shadow-[0_0_15px_rgba(16,185,129,0.18),inset_0_1px_0_rgba(255,255,255,0.2)] font-medium"
+                          : "text-slate-400 hover:bg-white/[0.06] hover:text-white hover:border hover:border-white/5",
                       )}
                     >
                       <item.icon
@@ -168,9 +173,9 @@ export function Shell({
           ))}
           <button
             onClick={() => setPaletteOpen(true)}
-            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-200"
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-500 transition hover:bg-white/[0.06] hover:text-slate-200 hover:border hover:border-white/5"
           >
-            <Terminal size={16} className="text-slate-600" />
+            <Terminal size={16} className="text-slate-500" />
             Quick find
             <kbd className="ml-auto rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">
               Ctrl K
@@ -178,12 +183,12 @@ export function Shell({
           </button>
         </nav>
 
-        <div className="mt-4 rounded-xl border border-white/5 bg-ink-950/50 p-3">
-          <p className="truncate text-xs font-medium text-slate-300">{user.email}</p>
-          <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-500">{user.role}</p>
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+          <p className="truncate text-xs font-semibold text-slate-200">{user.email}</p>
+          <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-400 font-mono">{user.role}</p>
           <button
             onClick={logout}
-            className="mt-2.5 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-400 transition hover:bg-white/5 hover:text-white"
+            className="mt-2.5 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-400 transition hover:bg-white/10 hover:text-white"
           >
             <LogOut size={13} /> Sign out
           </button>
@@ -200,8 +205,8 @@ export function Shell({
         }))}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/5 bg-ink-950/70 px-4 py-3 backdrop-blur-xl lg:hidden">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-ink-950/60 px-4 py-3 backdrop-blur-2xl lg:hidden shadow-lg">
           <Link href="/" className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500">
               <Terminal size={15} className="text-ink-950" />
@@ -248,7 +253,7 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">{title}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl drop-shadow-sm">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
       </div>
       {action}

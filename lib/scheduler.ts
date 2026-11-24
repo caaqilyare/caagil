@@ -14,13 +14,25 @@ import { runDueCronJobs } from "./cron-engine";
 import { recordSample, pruneMetrics } from "./metrics";
 import { pruneLoginAttempts } from "./ratelimit";
 import { prunePmaTokens } from "./pma";
-import { sweepOrphanFiles } from "./backup";
+import { applyRetention, sweepOrphanFiles } from "./backup";
 import { systemStats } from "./stats";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // sessions revoked after 30 days
 
 let lastCronTick = 0;
+let lastHourPrune = 0;
 let pmaUserProvisioned = false;
+
+async function pruneDockerResources(): Promise<void> {
+  try {
+    const { docker } = await import("./docker");
+    // Prune dangling images (<none>) and stopped one-off containers to save disk space
+    await docker.pruneImages({ filters: { dangling: { true: true } } }).catch(() => {});
+    await docker.pruneContainers().catch(() => {});
+  } catch {
+    /* docker socket not available or tests */
+  }
+}
 
 async function pruneSessions(): Promise<void> {
   try {
@@ -54,6 +66,13 @@ export async function schedulerTick(opts?: { now?: Date; skipStats?: boolean }):
   await prunePmaTokens().catch(() => {});
   await pruneMetrics().catch(() => {});
   await sweepOrphanFiles().catch(() => {});
+
+  // Hourly disk sweep: keep max 3 backups per target and clean dangling docker images
+  if (nowMs - lastHourPrune >= 3600_000) {
+    lastHourPrune = nowMs;
+    await applyRetention(3).catch(() => {});
+    await pruneDockerResources().catch(() => {});
+  }
 
   // Provision the limited phpMyAdmin user once on startup (best-effort).
   if (!pmaUserProvisioned) {

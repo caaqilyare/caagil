@@ -269,8 +269,8 @@ export async function deleteBackup(id: string, actor = "system"): Promise<void> 
   await logActivity("backup.delete", row.file, actor);
 }
 
-/** Retention policy: keep the newest N backups per target (files or db). */
-export async function applyRetention(keepPerTarget = 10, actor = "system"): Promise<number> {
+/** Retention policy: keep the newest N backups per target (files or db). Default 3 to conserve disk. */
+export async function applyRetention(keepPerTarget = 3, actor = "system"): Promise<number> {
   const rows = await query<BackupRow[]>("SELECT * FROM backups ORDER BY created_at ASC");
   const perTarget = new Map<string, BackupRow[]>();
   for (const row of rows) {

@@ -38,8 +38,8 @@ fi
 # ── swap: 2 GB hosts need headroom for Docker builds ──────────────
 mem_mb=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
 if [ "$mem_mb" -lt 3000 ] && [ ! -f /swapfile ]; then
-  log "adding 4 GB swap (host has ${mem_mb} MB RAM)"
-  fallocate -l 4G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=4096
+  log "adding 2 GB swap (host has ${mem_mb} MB RAM)"
+  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
   swapon /swapfile

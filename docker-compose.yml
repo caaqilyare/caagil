@@ -1,9 +1,18 @@
 name: caaqil
 
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "2"
+
 services:
   mysql:
     image: mysql:8.4
+    command: ["mysqld", "--disable-log-bin", "--max-connections=150"]
     restart: unless-stopped
+    <<: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: ${PANEL_DB_ROOT_PASSWORD}
       MYSQL_DATABASE: ${PANEL_DB_NAME:-caaqil}
@@ -22,6 +31,7 @@ services:
   traefik:
     image: traefik:v3.6
     restart: unless-stopped
+    <<: *default-logging
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -50,6 +60,8 @@ services:
       args:
         CAAQIL_COMMIT: ${CAAQIL_COMMIT:-unknown}
     restart: unless-stopped
+    stop_grace_period: 3s
+    <<: *default-logging
     depends_on:
       mysql:
         condition: service_healthy
@@ -91,6 +103,7 @@ services:
       context: .
       dockerfile: scripts/updater.Dockerfile
     restart: unless-stopped
+    <<: *default-logging
     command: ["sleep", "infinity"]
     environment:
       CAAQIL_INSTALL_DIR: /repo
