@@ -7,6 +7,16 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Graceful exit on SIGTERM/SIGINT so docker stop/restart is instantaneous
+  // instead of waiting for docker's 10-second kill timeout.
+  process.on("SIGTERM", () => {
+    process.exit(0);
+  });
+  process.on("SIGINT", () => {
+    process.exit(0);
+  });
+
   // Tests and one-off scripts should not start timers.
   if (process.env.CAAQIL_DISABLE_SCHEDULER === "1") return;
 

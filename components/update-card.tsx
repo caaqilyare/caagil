@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpCircle, Check, Loader2, RefreshCw, X } from "lucide-react";
+import { ArrowUpCircle, Check, Loader2, RefreshCw, RotateCcw, X } from "lucide-react";
 import { Button, cn } from "./ui";
 
 type Info = {
@@ -12,11 +12,14 @@ type Info = {
   state: "idle" | "running" | "done" | "error" | "unavailable";
   log: string;
   error?: string;
+  canRollback?: boolean;
+  previousCommit?: string | null;
 };
 
 const short = (sha: string | null | undefined) => (sha && sha !== "unknown" ? sha.slice(0, 7) : "—");
 
-const STEPS = ["Fetching code from GitHub", "Building the new panel image", "Restarting the panel"];
+const UPDATE_STEPS = ["Fetching code from GitHub", "Building the new panel image", "Restarting the panel"];
+const ROLLBACK_STEPS = ["Switching to previous commit", "Restoring previous image", "Restarting the panel"];
 
 export function UpdateCard() {
   const [info, setInfo] = useState<Info | null>(null);
@@ -95,15 +98,47 @@ export function UpdateCard() {
     }
   }
 
+  async function rollback() {
+    if (!confirm("Are you sure you want to rollback to the previous version?")) return;
+    setError(null);
+    setDone(false);
+    setOpen(true);
+    setStarting(true);
+    baseline.current = info?.current ?? null;
+    try {
+      const res = await fetch("/api/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rollback" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error || "Could not start the rollback.");
+        return;
+      }
+      setUpdating(true);
+      updatingRef.current = true;
+      setTimeout(() => void load(), 1200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start the rollback.");
+    } finally {
+      setStarting(false);
+    }
+  }
+
   const log = info?.log ?? "";
+  const isRollback = log.includes("rollback started");
   const step = done || info?.state === "done"
     ? 3
-    : log.includes("docker compose") || log.includes("building panel")
+    : log.includes("restarting the panel") || log.includes("waiting for the panel to answer")
       ? 2
-      : log.includes("git pull") || log.includes("update started")
+      : log.includes("building the new panel image") || log.includes("docker compose build")
         ? 1
-        : 0;
+        : log.includes("fetching code") || log.includes("git pull") || log.includes("update started") || log.includes("rollback started")
+          ? 0
+          : 0;
 
+  const currentSteps = isRollback ? ROLLBACK_STEPS : UPDATE_STEPS;
   const busy = starting || updating;
   const available = Boolean(info?.available) && !busy && !done;
   const offline = info?.state === "unavailable";
@@ -145,9 +180,11 @@ export function UpdateCard() {
                 />
               )}
               {busy
-                ? "Updating panel…"
+                ? isRollback
+                  ? "Rolling back panel…"
+                  : "Updating panel…"
                 : done
-                  ? "Update installed"
+                  ? "Installed successfully"
                   : available
                     ? "Update available"
                     : offline
@@ -166,9 +203,9 @@ export function UpdateCard() {
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
             {busy
-              ? "The panel restarts automatically when the build finishes."
+              ? "The panel restarts automatically when finished."
               : done
-                ? "Reloading with the new version…"
+                ? "Reloading with the restored version…"
                 : available
                   ? `main @ ${short(info.latest)} · you run ${short(info.current)}`
                   : offline
@@ -180,6 +217,16 @@ export function UpdateCard() {
           {available && (
             <Button size="sm" className="mt-2 w-full" onClick={start}>
               <ArrowUpCircle size={13} /> Update now
+            </Button>
+          )}
+          {info.canRollback && !busy && (
+            <Button
+              size="sm"
+              variant="danger"
+              className="mt-2 w-full"
+              onClick={rollback}
+            >
+              <RotateCcw size={13} /> Rollback to {short(info.previousCommit)}
             </Button>
           )}
           {busy && (
@@ -201,12 +248,18 @@ export function UpdateCard() {
                   ) : (
                     <Loader2 size={16} className="animate-spin text-brand-400" />
                   )}
-                  {done ? "Update installed" : "Updating Caaqil"}
+                  {done
+                    ? "Completed successfully"
+                    : isRollback
+                      ? "Rolling back Caaqil"
+                      : "Updating Caaqil"}
                 </h2>
                 <p className="mt-1 text-[11px] text-slate-400">
                   {done
-                    ? "Reloading with the new version…"
-                    : "GitHub → git pull → Docker rebuild. This takes 3–8 minutes."}
+                    ? "Reloading panel…"
+                    : isRollback
+                      ? "Restoring previous release image and git commit."
+                      : "Fast cached build · Auto-rollback on error."}
                 </p>
               </div>
               {!busy && (
@@ -226,7 +279,9 @@ export function UpdateCard() {
                   "flex h-14 w-14 items-center justify-center rounded-full border-2",
                   done
                     ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
-                    : "border-brand-500/30 bg-brand-500/10 text-brand-400",
+                    : isRollback
+                      ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
+                      : "border-brand-500/30 bg-brand-500/10 text-brand-400",
                 )}
               >
                 {done ? (
@@ -238,7 +293,7 @@ export function UpdateCard() {
             </div>
 
             <ol className="space-y-2">
-              {STEPS.map((label, i) => {
+              {currentSteps.map((label, i) => {
                 const finished = done || i < step;
                 const active = !done && i === step && busy;
                 return (
@@ -282,9 +337,22 @@ export function UpdateCard() {
             )}
 
             {!busy && !done && (
-              <Button size="sm" className="mt-4 w-full" onClick={start} loading={starting}>
-                <ArrowUpCircle size={13} /> Try again
-              </Button>
+              <div className="mt-4 flex flex-col gap-2">
+                <Button size="sm" className="w-full" onClick={start} loading={starting}>
+                  <ArrowUpCircle size={13} /> Try update again
+                </Button>
+                {info?.canRollback && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    className="w-full"
+                    onClick={rollback}
+                    loading={starting}
+                  >
+                    <RotateCcw size={13} /> Rollback to {short(info.previousCommit)}
+                  </Button>
+                )}
+              </div>
             )}
             {done && (
               <p className="mt-4 text-center text-[11px] text-emerald-300">
