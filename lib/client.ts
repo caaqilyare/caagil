@@ -24,6 +24,7 @@ export type ActivityRow = {
 };
 
 export type PanelState = {
+  version?: string;
   user: { id: string; email: string; role: string };
   apps: (AppRow & { wp_db?: AppDbRow | null })[];
   databases: DatabaseRow[];

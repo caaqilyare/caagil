@@ -288,6 +288,20 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       return ops.targetQuery(s("id"), s("sql"));
 
     /* settings */
+    case "settings.profile": {
+      const email = s("email").trim().toLowerCase();
+      const currentPassword = s("currentPassword");
+      if (!email || !email.includes("@")) throw new Error("A valid email address is required.");
+      const row = await one<{ password: string }>("SELECT password FROM users WHERE id = ?", [userId]);
+      if (!row || !verifyPassword(currentPassword, row.password)) {
+        throw new Error("Current password is incorrect.");
+      }
+      const exists = await one<{ id: string }>("SELECT id FROM users WHERE email = ? AND id != ?", [email, userId]);
+      if (exists) throw new Error("This email is already in use by another account.");
+      await execute("UPDATE users SET email = ? WHERE id = ?", [email, userId]);
+      await logActivity("user.profile_update", `Updated account email/username to ${email}`, actor);
+      return { saved: true, email };
+    }
     case "settings.password": {
       const current = s("current");
       const next = s("next");
@@ -297,6 +311,46 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       await execute("UPDATE users SET password = ? WHERE id = ?", [hashPassword(next), userId]);
       await execute("DELETE FROM sessions WHERE user_id = ?", [userId]);
       return { saved: true };
+    }
+    case "settings.factory_reset": {
+      if (s("confirm").trim().toUpperCase() !== "RESET") {
+        throw new Error("Please type RESET to confirm factory reset.");
+      }
+      // 1. Delete all deployed applications
+      const apps = await ops.listApps();
+      for (const a of apps) {
+        await ops.appAction(a.name, "delete", actor).catch(() => {});
+      }
+      // 2. Drop user/app managed databases (except system caaqil DB)
+      try {
+        const dbs = await managedDatabases();
+        for (const db of dbs) {
+          if (!["caaqil", "information_schema", "performance_schema", "mysql", "sys"].includes(db.name)) {
+            await dropManagedDatabase(db.name, actor).catch(() => {});
+          }
+        }
+      } catch {}
+      // 3. Clear domains
+      await execute("DELETE FROM domains").catch(() => {});
+      // 4. Clear cron jobs and cron history
+      await execute("DELETE FROM cron_runs").catch(() => {});
+      await execute("DELETE FROM cron_jobs").catch(() => {});
+      // 5. Delete all backups from disk and DB
+      try {
+        const backupList = await backups.listBackups();
+        for (const b of backupList) {
+          await backups.deleteBackup(b.id, actor).catch(() => {});
+        }
+        await backups.sweepOrphanFiles().catch(() => {});
+      } catch {}
+      // 6. Clear metrics history and activity log
+      await execute("DELETE FROM metrics").catch(() => {});
+      await execute("DELETE FROM activity").catch(() => {});
+      // 7. Clear external targets
+      await execute("DELETE FROM targets").catch(() => {});
+      // 8. Log the reset
+      await logActivity("panel.factory_reset", "Panel reset to fresh factory state", actor);
+      return { reset: true };
     }
     case "settings.save": {
       if (p.panelName !== undefined) await setSetting("panel_name", s("panelName"));

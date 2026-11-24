@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { aiConfig, PROVIDERS } from "@/lib/ai";
 import { ENGINES, PRESETS } from "@/lib/presets";
 import { overview } from "@/lib/ops";
+import { CAAQIL_VERSION } from "@/lib/version";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function GET() {
   const [state, ai] = await Promise.all([overview(), aiConfig()]);
 
   return NextResponse.json({
+    version: CAAQIL_VERSION,
     user,
     ...state,
     ai: { provider: ai.provider, model: ai.model, label: ai.label, hasKey: Boolean(ai.key) },
