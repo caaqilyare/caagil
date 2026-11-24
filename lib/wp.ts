@@ -3,7 +3,7 @@
  * MySQL server, plus wp-cli driven installs ("Softaculous"-style one-click).
  */
 import { PassThrough } from "node:stream";
-import type { Readable } from "node:stream";
+import type { Duplex, Readable } from "node:stream";
 import fs from "node:fs/promises";
 import path from "node:path";
 import Docker from "dockerode";
@@ -156,6 +156,50 @@ async function mysqlContainer() {
   );
   if (!hit) throw new Error("No MySQL server container found for managed databases.");
   return docker.getContainer(hit.Id);
+}
+
+export { mysqlContainer, execOutput };
+
+/**
+ * Run a command in a container, capturing stdout and stderr separately so
+ * binary output (SQL dumps) is never corrupted by diagnostics. `input` is
+ * written to stdin when provided (database imports).
+ */
+export async function execCapture(
+  container: Docker.Container,
+  cmd: string[],
+  input?: Buffer,
+): Promise<{ code: number; stdout: Buffer; stderr: string }> {
+  const exec = await container.exec({
+    Cmd: cmd,
+    AttachStdout: true,
+    AttachStderr: true,
+    AttachStdin: input !== undefined,
+  });
+  const stream = (await exec.start({ hijack: true, stdin: input !== undefined })) as unknown as Duplex;
+  const out = new PassThrough();
+  const err = new PassThrough();
+  docker.modem.demuxStream(stream, out, err);
+  const chunks: Buffer[] = [];
+  const errChunks: Buffer[] = [];
+  out.on("data", (c: Buffer) => chunks.push(c));
+  err.on("data", (c: Buffer) => errChunks.push(c));
+  if (input) {
+    await new Promise<void>((resolve, reject) => {
+      stream.write(input, (e?: Error | null) => (e ? reject(e) : resolve()));
+    });
+    stream.end();
+  }
+  await new Promise<void>((resolve, reject) => {
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+  const info = (await exec.inspect()) as { ExitCode?: number };
+  return {
+    code: info.ExitCode ?? 1,
+    stdout: Buffer.concat(chunks),
+    stderr: Buffer.concat(errChunks).toString("utf8").trim(),
+  };
 }
 
 async function execOutput(

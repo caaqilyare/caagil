@@ -1,17 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Database,
+  Download,
+  ExternalLink,
   Eye,
   EyeOff,
   Globe2,
   KeyRound,
+  Play,
   Plus,
   RefreshCw,
   Server,
+  Square,
   Terminal,
   Trash2,
+  Upload,
+  UserPlus,
+  Users,
   Wifi,
 } from "lucide-react";
 import { PageHeader } from "@/components/shell";
@@ -31,6 +38,28 @@ import { usePanel } from "@/lib/client";
 import type { DatabaseRow, TargetRow } from "@/lib/ops";
 import type { DbEngine } from "@/lib/presets";
 
+type PmaStatus = {
+  installed: boolean;
+  running: boolean;
+  url: string | null;
+  host: string | null;
+  error?: string;
+};
+
+type MysqlInfoT = {
+  version: string | null;
+  uptimeSeconds: number | null;
+  threadsConnected: number | null;
+  maxConnections: number | null;
+  sizeMb: number;
+  databases: number;
+  reachable: boolean;
+  error?: string;
+};
+
+type ManagedDb = { name: string; sizeMb: number; tables: number; app: string | null };
+type DbUserT = { name: string; host: string; databases: string[] };
+
 export default function DatabasesPage() {
   const { state, loading, act } = usePanel();
   const [createOpen, setCreateOpen] = useState(false);
@@ -39,17 +68,107 @@ export default function DatabasesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // phpMyAdmin + managed MySQL state
+  const [pma, setPma] = useState<PmaStatus | null>(null);
+  const [mysql, setMysql] = useState<MysqlInfoT | null>(null);
+  const [managedDbs, setManagedDbs] = useState<ManagedDb[] | null>(null);
+  const [dbUsers, setDbUsers] = useState<DbUserT[] | null>(null);
+  const [newDbOpen, setNewDbOpen] = useState(false);
+  const [newUserOpen, setNewUserOpen] = useState(false);
+  const [importFor, setImportFor] = useState<string | null>(null);
+
+  const refreshMysql = useCallback(async () => {
+    try {
+      const [info, dbs, users] = await Promise.all([
+        act<MysqlInfoT>("mysqldb.info"),
+        act<{ databases: ManagedDb[] }>("mysqldb.list"),
+        act<{ users: DbUserT[] }>("dbuser.list"),
+      ]);
+      setMysql(info);
+      setManagedDbs(dbs.databases);
+      setDbUsers(users.users);
+    } catch {
+      // Server without managed MySQL — section simply stays empty.
+      setMysql(null);
+      setManagedDbs([]);
+      setDbUsers([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void refreshMysql();
+  }, [refreshMysql]);
+
   async function run(key: string, action: string, payload: Record<string, unknown> = {}) {
     setBusy(key);
     setError(null);
     try {
       await act(action, payload);
+      await refreshMysql();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
     }
   }
+
+  async function runPma(action: string) {
+    setBusy(`pma-${action}`);
+    setError(null);
+    try {
+      const status = await act<PmaStatus>(action);
+      setPma(status);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadExport(name: string) {
+    setBusy(`export-${name}`);
+    setError(null);
+    try {
+      const res = await act<{ filename: string; sql: string }>("mysqldb.export", { name });
+      const blob = new Blob([res.sql], { type: "application/sql" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resetUserPassword(name: string) {
+    setBusy(`pw-${name}`);
+    setError(null);
+    try {
+      const res = await act<{ password: string }>("dbuser.password", { name });
+      alert(`New password for ${name}:\n${res.password}\n\nStore it somewhere safe — it is shown once.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  useEffect(() => {
+    // Initial phpMyAdmin status fetch (no side effects on failure).
+    void (async () => {
+      try {
+        setPma(await act<PmaStatus>("pma.status"));
+      } catch {
+        setPma(null);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -151,6 +270,182 @@ export default function DatabasesPage() {
         )}
       </div>
 
+      {/* phpMyAdmin */}
+      <div className="mt-8">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+          <Server size={14} className="text-brand-400" /> phpMyAdmin
+        </h2>
+        <PmaCard
+          status={pma ?? null}
+          busy={busy}
+          onAction={runPma}
+          onLaunch={() => {
+            window.location.href = "/api/pma/launch";
+          }}
+        />
+      </div>
+
+      {/* Managed MySQL administration */}
+      <div className="mt-8">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Database size={14} className="text-brand-400" /> MySQL administration
+          </h2>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setNewUserOpen(true)}>
+              <UserPlus size={13} /> New user
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setNewDbOpen(true)}>
+              <Plus size={13} /> New database
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => refreshMysql()}>
+              <RefreshCw size={13} /> Refresh
+            </Button>
+          </div>
+        </div>
+
+        {mysql && mysql.reachable && (
+          <p className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+            <span>
+              MySQL <span className="text-slate-300">{mysql.version}</span>
+            </span>
+            <span>
+              up <span className="text-slate-300">{uptime(mysql.uptimeSeconds)}</span>
+            </span>
+            <span>
+              {mysql.databases} databases · <span className="text-slate-300">{mysql.sizeMb} MB</span>
+            </span>
+            <span>
+              connections <span className="text-slate-300">
+                {mysql.threadsConnected ?? "?"}/{mysql.maxConnections ?? "?"}
+              </span>
+            </span>
+          </p>
+        )}
+        {mysql && !mysql.reachable && (
+          <p className="mb-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            Managed MySQL server is not reachable. {mysql.error}
+          </p>
+        )}
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Card className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-brand-400">
+                <Database size={14} />
+              </span>
+              <h3 className="text-sm font-semibold text-white">Databases</h3>
+            </div>
+            {!managedDbs || managedDbs.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-500">
+                No managed databases on the panel MySQL server yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {managedDbs.map((db) => (
+                  <div
+                    key={db.name}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/5 px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {db.name} {db.app && <Badge tone="info">{db.app}</Badge>}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {db.sizeMb} MB · {db.tables} tables
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Download SQL dump"
+                        loading={busy === `export-${db.name}`}
+                        onClick={() => void downloadExport(db.name)}
+                      >
+                        <Download size={13} />
+                      </Button>
+                      <Button size="sm" variant="ghost" title="Import SQL" onClick={() => setImportFor(db.name)}>
+                        <Upload size={13} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        title="Delete database"
+                        loading={busy === `dropdb-${db.name}`}
+                        onClick={() => {
+                          if (confirm(`Drop database ${db.name}? This removes all data.`)) {
+                            void run(`dropdb-${db.name}`, "mysqldb.drop", { name: db.name });
+                          }
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-brand-400">
+                <Users size={14} />
+              </span>
+              <h3 className="text-sm font-semibold text-white">Users & privileges</h3>
+            </div>
+            {!dbUsers || dbUsers.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-white/10 px-3 py-5 text-center text-xs text-slate-500">
+                No panel-managed MySQL users yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {dbUsers.map((u) => (
+                  <div key={`${u.name}@${u.host}`} className="rounded-xl border border-white/5 px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-white">
+                          {u.name}@{u.host}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          <KeyRound size={10} className="mr-1 inline align-text-bottom" />
+                          {u.databases.length > 0 ? u.databases.join(", ") : "no grants yet"}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Reset password (shows the new password once)"
+                          loading={busy === `pw-${u.name}`}
+                          onClick={() => void resetUserPassword(u.name)}
+                        >
+                          <KeyRound size={13} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          title="Delete user"
+                          loading={busy === `dropuser-${u.name}`}
+                          onClick={() => {
+                            if (confirm(`Delete MySQL user ${u.name}?`)) {
+                              void run(`dropuser-${u.name}`, "dbuser.drop", { name: u.name });
+                            }
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
       <CreateDatabaseModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -171,8 +466,352 @@ export default function DatabasesPage() {
         }}
       />
 
+      <NewDbModal
+        open={newDbOpen}
+        onClose={() => setNewDbOpen(false)}
+        onCreate={async (name) => {
+          await run("newdb", "mysqldb.create", { name });
+          setNewDbOpen(false);
+        }}
+      />
+
+      <NewUserModal
+        open={newUserOpen}
+        onClose={() => setNewUserOpen(false)}
+        databases={managedDbs?.map((d) => d.name) ?? []}
+        onCreate={async (name, databases) => {
+          const res = await act<{ password: string }>("dbuser.create", { name, databases });
+          setNewUserOpen(false);
+          alert(`User ${name} created.\nPassword: ${res.password}\nStore it somewhere safe — it is shown once.`);
+        }}
+      />
+
+      <ImportModal
+        dbName={importFor}
+        onClose={() => setImportFor(null)}
+        onImport={async (name, sql) => {
+          await act("mysqldb.import", { name, sql });
+          setImportFor(null);
+        }}
+      />
+
       <SqlConsole target={consoleFor} onClose={() => setConsoleFor(null)} run={act} />
     </>
+  );
+}
+
+function uptime(seconds: number | null): string {
+  if (!seconds) return "?";
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function PmaCard({
+  status,
+  busy,
+  onAction,
+  onLaunch,
+}: {
+  status: PmaStatus | null;
+  busy: string | null;
+  onAction: (action: string) => Promise<void>;
+  onLaunch: () => void;
+}) {
+  if (!status) {
+    return (
+      <Card className="flex flex-wrap items-center justify-between gap-3 py-3">
+        <div>
+          <p className="text-sm font-medium text-white">phpMyAdmin</p>
+          <p className="text-[11px] text-slate-500">
+            Status unavailable — the Docker engine may be offline.
+          </p>
+        </div>
+        <Button size="sm" variant="ghost" onClick={() => void onAction("pma.status")}>
+          <RefreshCw size={13} /> Retry
+        </Button>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-brand-400">
+            <Server size={16} />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <StatusDot ok={status.running} />
+              <h3 className="text-sm font-semibold text-white">phpMyAdmin</h3>
+              <Badge tone={status.running ? "ok" : status.installed ? "warn" : "neutral"}>
+                {status.running ? "running" : status.installed ? "stopped" : "not installed"}
+              </Badge>
+            </div>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              {status.url ? (
+                <>
+                  <Code>{status.url}</Code>
+                </>
+              ) : (
+                "Set a panel domain or IP access in Settings to enable phpMyAdmin."
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {status.running ? (
+            <>
+              <Button size="sm" onClick={onLaunch}>
+                <ExternalLink size={13} /> Open phpMyAdmin
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={busy === "pma-pma.stop"}
+                onClick={() => void onAction("pma.stop")}
+              >
+                <Square size={13} /> Stop
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              loading={busy === "pma-pma.start"}
+              onClick={() => void onAction("pma.start")}
+            >
+              <Play size={13} /> {status.installed ? "Start" : "Install & start"}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={busy === "pma-pma.status"}
+            onClick={() => void onAction("pma.status")}
+          >
+            <RefreshCw size={13} />
+          </Button>
+        </div>
+      </div>
+      {status.error && (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          {status.error}
+        </p>
+      )}
+      <p className="text-[11px] leading-relaxed text-slate-500">
+        Sessions open through a one-time, 60-second signon token — MySQL passwords never appear in
+        URLs. The phpMyAdmin MySQL user is limited to the panel&apos;s managed app databases; root
+        credentials are never shared with it.
+      </p>
+    </Card>
+  );
+}
+
+function NewDbModal({
+  open,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await onCreate(name);
+      setName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New MySQL database"
+      description="Created on the panel's own MySQL server. Lowercase letters, numbers, underscore."
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Database name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="blog_db" required />
+        </Field>
+        {error && (
+          <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" loading={busy}>
+            <Plus size={13} /> Create
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function NewUserModal({
+  open,
+  onClose,
+  databases,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  databases: string[];
+  onCreate: (name: string, databases: string[]) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggle(db: string) {
+    setSelected((cur) => (cur.includes(db) ? cur.filter((d) => d !== db) : [...cur, db]));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await onCreate(name, selected);
+      setName("");
+      setSelected([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New MySQL user"
+      description="A strong password is generated for you and shown once after creation."
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Username">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="blog_user" required />
+        </Field>
+        <Field label="Grant access to">
+          {databases.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-white/10 px-3 py-3 text-center text-xs text-slate-500">
+              No managed databases yet — the user will be created without grants.
+            </p>
+          ) : (
+            <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/40 p-2.5">
+              {databases.map((db) => (
+                <label key={db} className="flex items-center gap-2 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(db)}
+                    onChange={() => toggle(db)}
+                    className="h-3.5 w-3.5 accent-brand-500"
+                  />
+                  <Code>{db}</Code>
+                </label>
+              ))}
+            </div>
+          )}
+        </Field>
+        {error && (
+          <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" loading={busy}>
+            <UserPlus size={13} /> Create user
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ImportModal({
+  dbName,
+  onClose,
+  onImport,
+}: {
+  dbName: string | null;
+  onClose: () => void;
+  onImport: (name: string, sql: string) => Promise<void>;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file || !dbName) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      await onImport(dbName, text);
+      setFile(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={Boolean(dbName)}
+      onClose={onClose}
+      title={`Import SQL · ${dbName ?? ""}`}
+      description="Upload a .sql dump (max 64 MB). The dump's own DROP/CREATE statements are applied."
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="SQL dump file">
+          <input
+            type="file"
+            accept=".sql,.txt"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="w-full rounded-xl border border-white/10 bg-ink-950/40 px-3 py-2.5 text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:text-white"
+          />
+        </Field>
+        {error && (
+          <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" loading={busy} disabled={!file}>
+            <Upload size={13} /> Import
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

@@ -3,13 +3,35 @@ import { currentUser } from "@/lib/auth";
 import { setSetting } from "@/lib/db";
 import * as ops from "@/lib/ops";
 import { hashPassword, verifyPassword } from "@/lib/crypto";
-import { execute, one } from "@/lib/db";
+import { execute, one, logActivity } from "@/lib/db";
+import { originGuard } from "@/lib/httpsec";
+import {
+  mysqlInfo,
+  managedDatabases,
+  createManagedDatabase,
+  dropManagedDatabase,
+  databaseUsers,
+  createDatabaseUser,
+  setUserPassword,
+  dropDatabaseUser,
+  grantUserDatabase,
+  revokeUserDatabase,
+  exportDatabase,
+  importDatabase,
+} from "@/lib/mysqladmin";
+import * as pma from "@/lib/pma";
+import * as cronEngine from "@/lib/cron-engine";
+import { describeCron } from "@/lib/cron";
+import * as backups from "@/lib/backup";
 
 export const dynamic = "force-dynamic";
 
 type Body = { action: string; payload?: Record<string, unknown> };
 
 export async function POST(req: Request) {
+  const csrf = originGuard(req);
+  if (csrf) return csrf;
+
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -134,6 +156,116 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       return ops.addDomain(s("host"), s("app"), actor);
     case "domain.remove":
       return ops.removeDomain(s("id"), actor);
+
+    /* phpMyAdmin */
+    case "pma.status":
+      return pma.pmaStatus();
+    case "pma.start":
+      return pma.ensurePmaContainer(actor);
+    case "pma.stop":
+      return pma.stopPma(actor);
+    case "pma.launch": {
+      const launch = await pma.createLaunchToken(userId);
+      await logActivity("pma.launch", "phpMyAdmin session opened", actor);
+      return launch;
+    }
+
+    /* managed mysql admin */
+    case "mysqldb.info":
+      return mysqlInfo();
+    case "mysqldb.list":
+      return { databases: await managedDatabases() };
+    case "mysqldb.create":
+      return createManagedDatabase(s("name"), actor);
+    case "mysqldb.drop":
+      return dropManagedDatabase(s("name"), actor);
+    case "mysqldb.export": {
+      const dump = await exportDatabase(s("name"), actor);
+      return {
+        filename: dump.filename,
+        sql: dump.buffer.toString("utf8"),
+      };
+    }
+    case "mysqldb.import": {
+      const sql = p.sql as string | undefined;
+      if (!sql) throw new Error("No SQL content provided for import.");
+      return importDatabase(s("name"), Buffer.from(sql, "utf8"), actor);
+    }
+    case "dbuser.list":
+      return { users: await databaseUsers() };
+    case "dbuser.create":
+      return createDatabaseUser(
+        s("name"),
+        Array.isArray(p.databases) ? p.databases.map(String) : [],
+        p.password ? s("password") : undefined,
+        actor,
+      );
+    case "dbuser.password": {
+      const res = await setUserPassword(s("name"), p.password ? s("password") : undefined, actor);
+      return { password: res.password };
+    }
+    case "dbuser.drop":
+      return dropDatabaseUser(s("name"), actor);
+    case "dbuser.grant":
+      return grantUserDatabase(s("name"), s("database"), actor);
+    case "dbuser.revoke":
+      return revokeUserDatabase(s("name"), s("database"), actor);
+
+    /* cron */
+    case "cron.list":
+      return { jobs: await cronEngine.listCronJobs() };
+    case "cron.create": {
+      const job = await cronEngine.createCronJob(
+        {
+          name: s("name"),
+          expression: s("expression"),
+          targetKind: (s("targetKind") as "panel" | "app") || "panel",
+          targetName: p.targetName ? s("targetName") : undefined,
+          command: s("command"),
+          timeoutSec: p.timeoutSec ? n("timeoutSec") : undefined,
+        },
+        actor,
+      );
+      return { job, description: describeCron(job.expression) };
+    }
+    case "cron.update":
+      return cronEngine.updateCronJob(
+        s("id"),
+        {
+          name: p.name !== undefined ? s("name") : undefined,
+          expression: p.expression !== undefined ? s("expression") : undefined,
+          command: p.command !== undefined ? s("command") : undefined,
+          enabled: p.enabled !== undefined ? Boolean(p.enabled) : undefined,
+          timeoutSec: p.timeoutSec ? n("timeoutSec") : undefined,
+        },
+        actor,
+      );
+    case "cron.delete":
+      return cronEngine.deleteCronJob(s("id"), actor);
+    case "cron.run":
+      return cronEngine.runCronJobNow(s("id"), actor);
+    case "cron.history":
+      return { runs: await cronEngine.cronJobHistory(s("id"), p.limit ? n("limit") : 30) };
+    case "cron.preview":
+      return { next: cronEngine.previewNextRuns(s("expression"), 3) };
+
+    /* backups */
+    case "backup.list":
+      return { backups: await backups.listBackups() };
+    case "backup.create":
+      return s("kind") === "db"
+        ? backups.createDatabaseBackup(s("target"), actor, p.note ? s("note") : undefined)
+        : backups.createFilesBackup(s("target"), actor, p.note ? s("note") : undefined);
+    case "backup.restore":
+      return s("kind") === "db" || (await backups.getBackup(s("id")))?.kind === "db"
+        ? backups.restoreDatabaseBackup(s("id"), actor)
+        : backups.restoreFilesBackup(s("id"), actor);
+    case "backup.delete":
+      return backups.deleteBackup(s("id"), actor);
+    case "backup.verify":
+      return backups.verifyBackup(s("id"), actor);
+    case "backup.retention":
+      return { removed: await backups.applyRetention(p.keep ? n("keep") : 10, actor) };
 
     /* external mysql */
     case "target.add":

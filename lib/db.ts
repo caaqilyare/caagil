@@ -121,6 +121,77 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   ts BIGINT NOT NULL,
   INDEX(thread)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS metrics (
+  ts BIGINT PRIMARY KEY,
+  cpu FLOAT NOT NULL,
+  mem_pct FLOAT NOT NULL,
+  mem_used_mb INT NOT NULL,
+  disk_pct FLOAT NOT NULL,
+  disk_used_gb FLOAT NOT NULL,
+  load1 FLOAT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cron_jobs (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  expression VARCHAR(120) NOT NULL,
+  target_kind VARCHAR(10) NOT NULL DEFAULT 'panel',
+  target_name VARCHAR(120) NULL,
+  command TEXT NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  timeout_sec INT NOT NULL DEFAULT 300,
+  last_run_at BIGINT NULL,
+  last_status VARCHAR(20) NULL,
+  last_exit INT NULL,
+  last_duration_ms INT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cron_runs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(40) NOT NULL,
+  job_name VARCHAR(120) NOT NULL,
+  ts BIGINT NOT NULL,
+  exit_code INT NULL,
+  duration_ms INT NULL,
+  output MEDIUMTEXT NULL,
+  ok TINYINT NOT NULL DEFAULT 1,
+  timeout TINYINT NOT NULL DEFAULT 0,
+  INDEX(job_id, ts)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS pma_tokens (
+  token_hash VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(40) NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used_at BIGINT NULL,
+  created_at BIGINT NOT NULL,
+  INDEX(expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  ip VARCHAR(45) NOT NULL,
+  login VARCHAR(190) NOT NULL DEFAULT '',
+  ts BIGINT NOT NULL,
+  ok TINYINT NOT NULL DEFAULT 0,
+  INDEX(ip, ts),
+  INDEX(login, ts)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS backups (
+  id VARCHAR(40) PRIMARY KEY,
+  kind VARCHAR(10) NOT NULL,
+  target VARCHAR(120) NOT NULL,
+  file VARCHAR(255) NOT NULL,
+  size BIGINT NOT NULL DEFAULT 0,
+  verified TINYINT NOT NULL DEFAULT 0,
+  note VARCHAR(255) NULL,
+  created_at BIGINT NOT NULL,
+  INDEX(kind, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `;
 
 async function bootstrap(): Promise<Pool> {

@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Boxes,
+  Clock,
   Database,
+  Archive,
+  FileText,
   Globe2,
   LayoutDashboard,
   LogOut,
@@ -14,15 +17,47 @@ import {
   Terminal,
 } from "lucide-react";
 import { cn } from "./ui";
+import { CommandPalette } from "./command-palette";
 
-const NAV = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/apps", label: "Applications", icon: Boxes },
-  { href: "/databases", label: "Databases", icon: Database },
-  { href: "/domains", label: "Domains & SSL", icon: Globe2 },
-  { href: "/assistant", label: "AI Operator", icon: Sparkles },
-  { href: "/settings", label: "Settings", icon: Settings },
+type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+type NavGroup = { group: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    group: "Overview",
+    items: [{ href: "/", label: "Overview", icon: LayoutDashboard }],
+  },
+  {
+    group: "Hosting",
+    items: [
+      { href: "/apps", label: "Applications", icon: Boxes },
+      { href: "/domains", label: "Domains & SSL", icon: Globe2 },
+    ],
+  },
+  {
+    group: "Databases",
+    items: [
+      { href: "/databases", label: "Databases", icon: Database },
+    ],
+  },
+  {
+    group: "Operations",
+    items: [
+      { href: "/cron", label: "Cron Jobs", icon: Clock },
+      { href: "/backups", label: "Backups", icon: Archive },
+      { href: "/logs", label: "Logs", icon: FileText },
+    ],
+  },
+  {
+    group: "System",
+    items: [
+      { href: "/assistant", label: "AI Operator", icon: Sparkles },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
+
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 export function Shell({
   user,
@@ -36,6 +71,19 @@ export function Shell({
   const pathname = usePathname();
   const router = useRouter();
   const [updateReady, setUpdateReady] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Ctrl/Cmd+K opens the command palette.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // A quiet dot next to Settings when GitHub main is ahead. The Settings page
   // owns the full update UI; this is only a hint.
@@ -59,6 +107,8 @@ export function Shell({
     };
   }, []);
 
+  const navItems = useMemo(() => NAV, []);
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -79,34 +129,53 @@ export function Shell({
           </span>
         </Link>
 
-        <nav className="flex-1 space-y-0.5">
-          {NAV.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition",
-                  active
-                    ? "bg-white/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.06)]"
-                    : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
-                )}
-              >
-                <item.icon
-                  size={16}
-                  className={cn(active ? "text-brand-400" : "text-slate-500 group-hover:text-slate-300")}
-                />
-                {item.label}
-                {item.href === "/settings" && updateReady && (
-                  <span className="relative ml-auto flex h-1.5 w-1.5" title="Panel update available">
-                    <span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-amber-400 opacity-75" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-3 overflow-y-auto">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.group}>
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                {group.group}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition",
+                        active
+                          ? "bg-white/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.06)]"
+                          : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
+                      )}
+                    >
+                      <item.icon
+                        size={16}
+                        className={cn(active ? "text-brand-400" : "text-slate-500 group-hover:text-slate-300")}
+                      />
+                      {item.label}
+                      {item.href === "/settings" && updateReady && (
+                        <span className="relative ml-auto flex h-1.5 w-1.5" title="Panel update available">
+                          <span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-amber-400 opacity-75" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-200"
+          >
+            <Terminal size={16} className="text-slate-600" />
+            Quick find
+            <kbd className="ml-auto rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">
+              Ctrl K
+            </kbd>
+          </button>
         </nav>
 
         <div className="mt-4 rounded-xl border border-white/5 bg-ink-950/50 p-3">
@@ -120,6 +189,16 @@ export function Shell({
           </button>
         </div>
       </aside>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        items={navItems.map((item) => ({
+          label: item.label,
+          hint: item.href,
+          run: () => router.push(item.href),
+        }))}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/5 bg-ink-950/70 px-4 py-3 backdrop-blur-xl lg:hidden">

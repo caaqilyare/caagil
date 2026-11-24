@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import * as files from "@/lib/files";
+import { originGuard } from "@/lib/httpsec";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,8 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const csrf = originGuard(req);
+  if (csrf) return csrf;
   if (!(await currentUser())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

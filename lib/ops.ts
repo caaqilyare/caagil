@@ -1487,6 +1487,16 @@ export async function savePanelAccess(input: PanelAccessInput, actor = "system")
     actor,
   );
 
+  // phpMyAdmin's Traefik labels embed the panel host — recreate when it moved.
+  if (current.domain !== next.domain || current.ip !== next.ip) {
+    try {
+      const { refreshPmaIfRunning } = await import("./pma");
+      await refreshPmaIfRunning();
+    } catch {
+      /* phpMyAdmin is optional; access changes must never fail because of it */
+    }
+  }
+
   return {
     domain: next.domain,
     url: next.domain ? `https://${next.domain}` : next.allowIp && next.ip ? `http://${next.ip}` : "",

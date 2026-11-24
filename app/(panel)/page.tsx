@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -15,10 +16,40 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/shell";
 import { Badge, Card, Empty, Meter, StatusDot, cn } from "@/components/ui";
+import { Sparkline } from "@/components/sparkline";
 import { ago, usePanel } from "@/lib/client";
+import type { MetricSample } from "@/lib/metrics";
+
+type MetricsPayload = { range: string; series: MetricSample[] };
+
+/** Poll /api/metrics once per minute for the dashboard charts. */
+function useMetrics() {
+  const [series, setSeries] = useState<MetricSample[]>([]);
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch("/api/metrics?range=24h", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as MetricsPayload;
+        if (alive) setSeries(data.series ?? []);
+      } catch {
+        /* charts are best-effort */
+      }
+    }
+    void load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  return series;
+}
 
 export default function OverviewPage() {
   const { state, loading } = usePanel();
+  const series = useMetrics();
 
   if (loading || !state) {
     return <div className="h-64 animate-pulse rounded-2xl border border-white/5 bg-ink-900/40" />;
@@ -26,6 +57,10 @@ export default function OverviewPage() {
 
   const { stats, apps, databases, domains } = state;
   const running = apps.filter((a) => a.status === "running").length;
+
+  const cpuSeries = series.map((s) => s.cpu);
+  const memSeries = series.map((s) => s.memPct);
+  const diskSeries = series.map((s) => s.diskPct);
 
   const tones = (p: number) => (p > 88 ? "red" : p > 70 ? "amber" : "brand");
 
@@ -63,6 +98,7 @@ export default function OverviewPage() {
           sub={`${stats.cpu.cores} vCPU · load ${stats.cpu.load1}`}
           percent={stats.cpu.percent}
           tone={tones(stats.cpu.percent)}
+          spark={cpuSeries}
         />
         <Stat
           icon={<MemoryStick size={15} />}
@@ -71,6 +107,7 @@ export default function OverviewPage() {
           sub={`of ${stats.memory.totalMb} MB`}
           percent={stats.memory.percent}
           tone={tones(stats.memory.percent)}
+          spark={memSeries}
         />
         <Stat
           icon={<HardDrive size={15} />}
@@ -79,6 +116,7 @@ export default function OverviewPage() {
           sub={`of ${Math.round(stats.disk.totalGb)} GB`}
           percent={stats.disk.percent}
           tone={tones(stats.disk.percent)}
+          spark={diskSeries}
         />
         <Stat
           icon={<Server size={15} />}
@@ -189,6 +227,7 @@ function Stat({
   sub,
   percent,
   tone,
+  spark,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -196,7 +235,9 @@ function Stat({
   sub: string;
   percent: number;
   tone: "brand" | "amber" | "red";
+  spark?: number[];
 }) {
+  const stroke = tone === "red" ? "#f87171" : tone === "amber" ? "#fbbf24" : "#34d399";
   return (
     <Card className="space-y-3">
       <div className="flex items-center justify-between text-slate-400">
@@ -204,12 +245,18 @@ function Stat({
           {icon}
           {label}
         </span>
+        {spark && spark.length > 1 && (
+          <span className="text-[10px] text-slate-600">24h</span>
+        )}
       </div>
       <div>
         <p className="text-2xl font-semibold tracking-tight text-white">{value}</p>
         <p className="mt-0.5 text-[11px] text-slate-500">{sub}</p>
       </div>
-      <Meter value={percent} tone={tone} />
+      <div className="flex items-end gap-3">
+        <Meter value={percent} tone={tone} />
+        {spark && <Sparkline values={spark} width={96} height={30} className="shrink-0" stroke={stroke} />}
+      </div>
     </Card>
   );
 }

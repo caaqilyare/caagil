@@ -2,7 +2,8 @@
 
 A fast, AI-native hosting control panel. One container, one MySQL, one
 Traefik — it deploys PHP, Node.js and static sites, runs databases with optional
-public access, and ships an AI operator that can actually do the work.
+public access, manages MySQL users and phpMyAdmin, schedules cron jobs, takes
+backups, and ships an AI operator that can actually do the work.
 
 ```
 Panel UI      Next.js 15 (App Router) + Tailwind, dark glass UI
@@ -21,19 +22,111 @@ Deploy        docker compose up -d --build  (portable, single directory)
 | WordPress one-click | Auto-install with its own MySQL database, admin user + password, and a live URL — cPanel/Softaculous style |
 | Source | Clone from Git over HTTPS/SSH, redeploy with one click |
 | Databases | MySQL, MariaDB, PostgreSQL, MongoDB, Redis — on the internal network as `db-<name>` |
+| MySQL administration | Create/drop schemas, manage users + grants, export/import SQL dumps on the panel's own MySQL server |
+| phpMyAdmin | One-click phpMyAdmin at `<panel>/pma` with one-time signon tokens — no root exposure, no passwords in URLs |
 | Remote DB | Publish a public port + `'user'@'%'` grant, or attach an external MySQL and query it read-only |
 | Domains | Pick an existing domain or type a new one; attach many hostnames per app; auto certificates |
 | Path routing | Mount an app under `/name` on the panel domain (or any host), e.g. `https://panel.example.com/blog` — WordPress keeps the prefix in `wp-admin`/auth redirects and pretty permalinks resolve |
+| Cron jobs | 5-field cron engine with per-run history, output capture, timeouts, panel- or app-container execution |
+| Backups | tar.gz file archives + gzip database dumps, verify/restore/download, per-target retention |
+| Metrics history | 1-minute samples for CPU/memory/disk, dashboard sparklines (1h–30d), disk/memory alerts |
+| Logs | Filterable activity feed + failed-cron output viewer at `/logs` |
 | Files | Built-in file manager per app: browse, edit, upload, rename and delete `data/sites/<app>` |
 | Access | Change the panel domain, rename the panel, or reach it at `http://IP` — all from Settings, no compose edits |
 | AI operator | Chat agent with 13 tools: create/delete apps, databases, domains, mount paths, read logs, system stats |
-| Ops | Live CPU/mem/disk, container logs, start/stop/restart, activity log |
+| Ops | Live CPU/mem/disk with 24h sparklines, container logs, start/stop/restart, activity log |
+| Security | Login rate limiting, same-origin enforcement on all mutating APIs, security headers, AES-256-GCM secret encryption, background session/token cleanup |
+
+## phpMyAdmin
+
+Databases → **phpMyAdmin** → *Install & start*. The panel:
+
+1. Provisions a dedicated MySQL user `caaqil_pma` that has privileges **only**
+   on managed app databases (`wp_%`) — never global rights, never the panel
+   database, never root.
+2. Writes a phpMyAdmin `config.user.inc.php` (`auth_type = signon`) and a
+   signon bridge script into `data/pma/` and mounts them read-only into a
+   panel-managed `phpmyadmin:5.2-apache` container on the `caaqil` network.
+3. Routes it through Traefik at `https://<panel-domain>/pma`.
+
+Clicking **Open phpMyAdmin** creates a **single-use, 60-second token** (only its
+SHA-256 hash is stored). The browser is redirected to the signon bridge, which
+exchanges the token server-to-server (shared internal secret) for the limited
+MySQL credentials and starts the phpMyAdmin session. MySQL passwords never
+appear in URLs, referrer headers or logs, and the token cannot be replayed.
+Changing the panel domain/IP in Settings automatically recreates the container
+with the new routing labels. Stop removes the container; starting again is
+one click.
+
+## MySQL administration
+
+Also on the Databases page, for the panel's own MySQL server (the one that
+hosts `wp_*` WordPress databases):
+
+- **Server info** — version, uptime, connection count, total size.
+- **Databases** — create/drop schemas, per-database size and table counts,
+  download a `.sql` dump (mysqldump `--single-transaction`), import a dump
+  (≤ 64 MB) straight into an existing database.
+- **Users & privileges** — create users with generated 24+ char passwords,
+  reset passwords, delete users; every identifier is validated
+  (`[a-z][a-z0-9_]`) and quoted, and root credentials never leave the mysql
+  container (all statements run through `docker exec`).
+
+## Cron jobs
+
+Ops → **Cron jobs**. Standard 5-field crontab expressions with presets
+(`*/5 * * * *`, daily, weekly, monthly…), executed by the panel's background
+scheduler once per matched minute (idempotent — a restart never double-runs a
+slot). Each job can run:
+
+- in the **panel container** (`sh -lc`, for host-side maintenance), or
+- inside an **app container** (`docker exec` + `timeout`, busybox compatible).
+
+Every run records exit code, duration and up to 16 KB of output; the history
+dialog shows the last 50 runs with expandable output, and failures appear in
+`/logs` and the activity feed. Timeouts are enforced (5 s – 1 h).
+
+## Backups
+
+Ops → **Backups**:
+
+- **App files** — `tar.gz` of `data/sites/<app>`.
+- **Databases** — `mysqldump | gzip` of any managed database.
+- **Verify** — integrity-check the gzip/tar stream before you need it.
+- **Restore** — files: the current directory is moved aside as
+  `<app>.pre-restore` first; databases: the dump's own DROP/CREATE statements
+  are applied.
+- **Download** — authenticated streaming download for off-server storage.
+- **Retention** — the newest 10 backups per target are kept; older ones are
+  pruned by the scheduler.
+
+Backups live on the same disk as the panel (`data/backups/`) — download
+important ones off the server.
+
+## Metrics history & alerts
+
+The scheduler samples CPU, memory and disk once per minute into MySQL and the
+dashboard renders 24-hour sparklines next to each gauge. `/api/metrics?range=`
+serves bucket-averaged series for 1h / 6h / 24h / 7d / 30d. When disk or memory
+crosses 90%, an alert is written to the activity feed at most once per hour.
+
+## Logs
+
+Ops → **Logs** combines the panel activity feed with failed cron-run output.
+Filter by text, toggle *errors only*, auto-refresh every 30 s. Also available
+at `GET /api/logs`.
+
+## Command palette
+
+Press **Ctrl/Cmd + K** anywhere in the panel for quick page navigation.
+The sidebar is grouped into Overview / Hosting / Databases / Operations / System.
 
 ## Local development
 
 ```bash
 cp .env.example .env      # fill PANEL_DB_* — no admin account is needed
 npm install
+npm test                  # unit tests (cron parser, crypto, validators, …)
 npm run dev               # http://localhost:4000/setup
 ```
 
@@ -244,7 +337,24 @@ docker system prune -af --volumes   # reclaim space when needed
 
 - Sessions are server-side rows; cookies are `httpOnly`, signed with `AUTH_SECRET`.
 - Passwords use scrypt with per-user salt.
+- **Login rate limiting** — failed sign-ins are counted per source IP (10) and
+  per account (8) over a sliding 15-minute window; successful sign-ins clear
+  their record. Replies stay generic and the limit never breaks availability
+  (it fails open if the table is unreachable).
+- **Same-origin enforcement** — every mutating API (`/api/actions`, file
+  operations, setup, login helpers) rejects requests whose `Origin`/`Referer`
+  does not match the serving host, on top of `SameSite=Lax` cookies.
+- **Security headers** — `X-Frame-Options: DENY`, `nosniff`, restrictive
+  `Referrer-Policy` and `Permissions-Policy`, `Cross-Origin-Opener-Policy`.
+- **Secret encryption at rest** — database credentials and internal secrets in
+  the `settings` table are encrypted with AES-256-GCM (key derived from
+  `AUTH_SECRET` via scrypt, `enc:v1:` prefix); legacy plaintext rows still
+  decrypt transparently.
+- **Background cleanup** — the scheduler prunes expired sessions, login
+  attempts, phpMyAdmin tokens and stale metric samples.
 - The panel mounts `/var/run/docker.sock` — it is root-equivalent on the host, so
   only expose it behind HTTPS and a strong admin password.
 - Remote database access is opt-in per database, with generated 24-char passwords.
-- AI keys are stored in MySQL and never sent to the browser.
+- AI keys are stored in MySQL (encrypted) and never sent to the browser.
+- phpMyAdmin runs with a least-privilege MySQL user and one-time signon tokens;
+  root credentials are never shared with it.

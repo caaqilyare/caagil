@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { createSession } from "@/lib/auth";
 import { execute, one, setSetting, logActivity } from "@/lib/db";
 import { hashPassword, randomId } from "@/lib/crypto";
+import { originGuard } from "@/lib/httpsec";
 
 export const dynamic = "force-dynamic";
 
 type Body = { login?: string; password?: string; panelName?: string };
 
 export async function POST(req: Request) {
+  const csrf = originGuard(req);
+  if (csrf) return csrf;
+
   const users = await one<{ c: number }>("SELECT COUNT(*) AS c FROM users");
   if (Number(users?.c ?? 0) > 0) {
     return NextResponse.json({ error: "Setup is already complete." }, { status: 403 });
