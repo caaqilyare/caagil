@@ -1,22 +1,53 @@
 "use client";
 
-import { clsx } from "clsx";
+import { clsx, type ClassValue } from "clsx";
+import { cva, type VariantProps } from "class-variance-authority";
+import { twMerge } from "tailwind-merge";
+import { AnimatePresence, motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 
-export const cn = clsx;
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 /* ───────────────────────────── buttons ───────────────────────────── */
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "ghost" | "subtle" | "danger";
-  size?: "sm" | "md";
-  loading?: boolean;
-};
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:scale-[.985]",
+  {
+    variants: {
+      variant: {
+        primary:
+          "bg-primary text-primary-foreground shadow-[0_10px_30px_-14px_hsl(var(--glow)/.55)] hover:bg-primary/90 hover:shadow-[0_16px_38px_-16px_hsl(var(--glow)/.65)]",
+        secondary:
+          "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/70",
+        ghost:
+          "border border-border bg-transparent text-foreground hover:border-primary/25 hover:bg-accent hover:text-accent-foreground",
+        subtle: "border border-border bg-muted text-foreground hover:bg-muted/70",
+        danger:
+          "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20",
+        outline:
+          "border border-input bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+      },
+      size: {
+        sm: "h-8 px-3 text-xs",
+        md: "h-10 px-4 text-sm",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: { variant: "primary", size: "md" },
+  },
+);
+
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    loading?: boolean;
+  };
 
 export function Button({
-  variant = "primary",
-  size = "md",
+  variant,
+  size,
   loading,
   className,
   children,
@@ -27,16 +58,7 @@ export function Button({
     <button
       {...rest}
       disabled={disabled || loading}
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50",
-        size === "sm" ? "h-8 px-3 text-xs" : "h-10 px-4 text-sm",
-        variant === "primary" &&
-          "bg-brand-500 text-ink-950 shadow-glow hover:bg-brand-400 active:scale-[.985]",
-        variant === "ghost" && "border border-white/10 text-slate-300 hover:bg-white/5",
-        variant === "subtle" && "bg-white/5 text-slate-200 hover:bg-white/10",
-        variant === "danger" && "border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20",
-        className,
-      )}
+      className={cn(buttonVariants({ variant, size }), className)}
     >
       {loading && (
         <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -49,7 +71,7 @@ export function Button({
 /* ────────────────────────────── inputs ──────────────────────────── */
 
 const fieldBase =
-  "w-full rounded-xl border border-white/10 bg-ink-950/60 px-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/15";
+  "w-full rounded-xl border border-input bg-background/60 px-3 text-sm text-foreground placeholder:text-muted-foreground/70 outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(fieldBase, "h-10", props.className)} />;
@@ -63,7 +85,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={cn(fieldBase, "h-10 appearance-none bg-ink-900 pr-8", props.className)}
+      className={cn(fieldBase, "h-10 appearance-none bg-card pr-8", props.className)}
     />
   );
 }
@@ -81,9 +103,11 @@ export function Field({
 }) {
   return (
     <label className={cn("block space-y-1.5", className)}>
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
       {children}
-      {hint && <span className="block text-[11px] leading-relaxed text-slate-500">{hint}</span>}
+      {hint && <span className="block text-[11px] leading-relaxed text-muted-foreground/80">{hint}</span>}
     </label>
   );
 }
@@ -104,11 +128,11 @@ export function Badge({
   className?: string;
 }) {
   const tones = {
-    neutral: "bg-white/5 text-slate-300 border-white/10",
-    ok: "bg-brand-500/10 text-brand-400 border-brand-500/25",
-    warn: "bg-amber-500/10 text-amber-300 border-amber-500/25",
-    bad: "bg-red-500/10 text-red-300 border-red-500/25",
-    info: "bg-sky-500/10 text-sky-300 border-sky-500/25",
+    neutral: "border-border bg-muted/70 text-muted-foreground",
+    ok: "border-primary/25 bg-primary/10 text-primary",
+    warn: "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
+    bad: "border-destructive/25 bg-destructive/10 text-destructive",
+    info: "border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-300",
   };
   return (
     <span
@@ -128,20 +152,35 @@ export function StatusDot({ ok }: { ok: boolean }) {
     <span
       className={cn(
         "inline-block h-1.5 w-1.5 rounded-full",
-        ok ? "bg-brand-400 shadow-[0_0_8px_rgba(52,224,161,.8)]" : "bg-red-400",
+        ok
+          ? "bg-primary shadow-[0_0_8px_hsl(var(--glow)/.7)]"
+          : "bg-destructive shadow-[0_0_8px_hsl(var(--destructive)/.6)]",
       )}
     />
   );
 }
 
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <kbd
+      className={cn(
+        "rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
 export function Meter({ value, tone = "brand" }: { value: number; tone?: "brand" | "amber" | "red" }) {
   const colors = {
-    brand: "from-brand-500 to-brand-400",
+    brand: "from-primary to-primary/60",
     amber: "from-amber-500 to-amber-400",
-    red: "from-red-500 to-red-400",
+    red: "from-destructive to-destructive/60",
   };
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
       <div
         className={cn("h-full rounded-full bg-gradient-to-r transition-all", colors[tone])}
         style={{ width: `${Math.min(100, Math.max(2, value))}%` }}
@@ -167,40 +206,60 @@ export function Modal({
   footer?: ReactNode;
   wide?: boolean;
 }) {
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-950/80 p-4 backdrop-blur-sm sm:items-center">
-      <div
-        className={cn(
-          "animate-fade-up w-full rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-2xl",
-          wide ? "max-w-3xl" : "max-w-lg",
-        )}
-      >
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold text-white">{title}</h2>
-            {description && <p className="mt-1 text-xs text-slate-400">{description}</p>}
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
-            aria-label="Close"
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-overlay/50 p-4 backdrop-blur-sm sm:items-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          onMouseDown={onClose}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            onMouseDown={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className={cn(
+              "w-full rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-2xl",
+              wide ? "max-w-3xl" : "max-w-lg",
+            )}
           >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="space-y-4">{children}</div>
-        {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
-      </div>
-    </div>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">{title}</h2>
+                {description && (
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-4">{children}</div>
+            {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
 export function Empty({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
   return (
-    <div className="grid-lines flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 px-6 py-14 text-center">
-      <p className="text-sm font-medium text-slate-300">{title}</p>
-      {hint && <p className="max-w-sm text-xs text-slate-500">{hint}</p>}
+    <div className="grid-lines flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border px-6 py-14 text-center">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {hint && <p className="max-w-sm text-xs text-muted-foreground">{hint}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );
@@ -208,7 +267,7 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
 
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="rounded-md bg-ink-950/80 px-1.5 py-0.5 font-mono text-[11px] text-brand-400">
+    <code className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-[11px] text-primary">
       {children}
     </code>
   );

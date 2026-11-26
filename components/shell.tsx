@@ -3,23 +3,32 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  Archive,
   Boxes,
   Clock,
   Database,
-  Archive,
   FileText,
   Globe2,
   LayoutDashboard,
   LogOut,
+  Menu,
+  Search,
   Settings,
   Sparkles,
   Terminal,
+  X,
 } from "lucide-react";
-import { cn } from "./ui";
+import { cn, Kbd } from "./ui";
 import { CommandPalette } from "./command-palette";
+import { ThemeToggle } from "./theme";
 
-type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+};
 type NavGroup = { group: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -36,9 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     group: "Databases",
-    items: [
-      { href: "/databases", label: "Databases", icon: Database },
-    ],
+    items: [{ href: "/databases", label: "Databases", icon: Database }],
   },
   {
     group: "Operations",
@@ -57,7 +64,147 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const NAV = NAV_GROUPS.flatMap((g) => g.items);
+const NAV = NAV_GROUPS.flatMap((group) => group.items);
+
+function isActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function pageTitle(pathname: string) {
+  const hit = [...NAV]
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((item) => isActive(pathname, item.href));
+  return hit?.label ?? "Overview";
+}
+
+function Brand({ panelName, onNavigate }: { panelName: string; onNavigate?: () => void }) {
+  return (
+    <Link href="/" onClick={onNavigate} className="flex min-w-0 items-center gap-2.5">
+      <span className="glow-soft flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 via-emerald-400 to-teal-500">
+        <Terminal size={17} className="text-ink-950" strokeWidth={2.6} />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-bold tracking-tight text-foreground">
+          {panelName}
+        </span>
+        <span className="block font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          cloud panel
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+function NavList({
+  pathname,
+  layoutId,
+  updateReady,
+  onNavigate,
+  onQuickFind,
+}: {
+  pathname: string;
+  layoutId: string;
+  updateReady: boolean;
+  onNavigate?: () => void;
+  onQuickFind: () => void;
+}) {
+  return (
+    <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-3">
+      {NAV_GROUPS.map((group) => (
+        <div key={group.group}>
+          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+            {group.group}
+          </p>
+          <div className="space-y-0.5">
+            {group.items.map((item) => {
+              const active = isActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "group relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
+                    active
+                      ? "font-medium text-primary"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId={layoutId}
+                      className="absolute inset-0 rounded-xl border border-primary/20 bg-accent"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <item.icon size={16} className="relative z-10 shrink-0" />
+                  <span className="relative z-10 truncate">{item.label}</span>
+                  {item.href === "/settings" && updateReady && (
+                    <span
+                      className="relative z-10 ml-auto flex h-1.5 w-1.5"
+                      title="Panel update available"
+                    >
+                      <span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-amber-400 opacity-75" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => {
+          onQuickFind();
+          onNavigate?.();
+        }}
+        className="flex w-full items-center gap-2.5 rounded-xl border border-border/60 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        <Search size={16} className="shrink-0" />
+        Quick find
+        <Kbd className="ml-auto">Ctrl K</Kbd>
+      </button>
+    </nav>
+  );
+}
+
+function UserCard({
+  user,
+  onLogout,
+}: {
+  user: { email: string; role: string };
+  onLogout: () => void;
+}) {
+  const initial = (user.email || "?").trim().charAt(0).toUpperCase();
+  return (
+    <div className="rounded-xl border border-sidebar-border bg-card/50 p-2.5">
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-primary/20 bg-primary/10 text-xs font-semibold text-primary">
+          {initial}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold text-foreground">{user.email}</p>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {user.role}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          aria-label="Sign out"
+          title="Sign out"
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <LogOut size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function Shell({
   user,
@@ -70,20 +217,27 @@ export function Shell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const [updateReady, setUpdateReady] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Ctrl/Cmd+K opens the command palette.
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
+    function onKey(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((value) => !value);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   // A quiet dot next to Settings when GitHub main is ahead. The Settings page
   // owns the full update UI; this is only a hint.
@@ -108,134 +262,171 @@ export function Shell({
   }, []);
 
   const navItems = useMemo(() => NAV, []);
+  const title = pageTitle(pathname);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
 
+  const paletteItems = useMemo(
+    () =>
+      navItems.map((item) => ({
+        label: item.label,
+        hint: item.href,
+        run: () => router.push(item.href),
+      })),
+    [navItems, router],
+  );
+
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-[#060a11]">
-      {/* Dynamic ambient lights that make frosted glass visible and breathtaking across the layout */}
-      <div className="pointer-events-none fixed -top-40 left-10 h-[650px] w-[650px] rounded-full bg-gradient-to-br from-emerald-500/22 via-teal-500/12 to-transparent blur-[140px] -z-10" />
-      <div className="pointer-events-none fixed top-1/4 right-0 h-[650px] w-[650px] rounded-full bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-transparent blur-[140px] -z-10" />
-      <div className="pointer-events-none fixed -bottom-32 left-1/3 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-purple-500/18 via-indigo-500/10 to-transparent blur-[140px] -z-10" />
+    <div className="relative min-h-screen bg-background text-foreground">
+      {/* Ambient light — soft, low opacity, calmer in light mode (see globals). */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="ambient absolute -top-48 left-[-12%] h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.22),transparent_65%)] blur-3xl" />
+        <div className="ambient absolute right-[-15%] top-1/3 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.16),transparent_65%)] blur-3xl" />
+        <div className="ambient absolute -bottom-48 left-1/3 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.12),transparent_65%)] blur-3xl" />
+      </div>
 
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-ink-950/40 px-3 py-4 backdrop-blur-3xl shadow-[4px_0_30px_rgba(0,0,0,0.5)] lg:flex">
-        <Link href="/" className="mb-6 flex items-center gap-2.5 px-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 via-emerald-400 to-teal-500 shadow-[0_0_20px_rgba(52,224,161,0.5)]">
-            <Terminal size={17} className="text-ink-950" strokeWidth={2.6} />
-          </span>
-          <span>
-            <span className="block text-sm font-bold tracking-tight text-white">{panelName}</span>
-            <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-400 font-mono">
-              cloud panel
-            </span>
-          </span>
-        </Link>
+      <div className="flex min-h-screen">
+        {/* Desktop sidebar */}
+        <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar/80 backdrop-blur-xl lg:flex">
+          <div className="flex h-16 items-center px-5">
+            <Brand panelName={panelName} />
+          </div>
+          <NavList
+            pathname={pathname}
+            layoutId="sidebar-active"
+            updateReady={updateReady}
+            onQuickFind={() => setPaletteOpen(true)}
+          />
+          <div className="border-t border-sidebar-border p-3">
+            <UserCard user={user} onLogout={logout} />
+          </div>
+        </aside>
 
-        <nav className="flex-1 space-y-3 overflow-y-auto">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.group}>
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {group.group}
-              </p>
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
-                  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all duration-200",
-                        active
-                          ? "bg-gradient-to-r from-emerald-500/20 via-brand-500/15 to-teal-500/10 text-emerald-200 border border-emerald-400/30 shadow-[0_0_15px_rgba(16,185,129,0.18),inset_0_1px_0_rgba(255,255,255,0.2)] font-medium"
-                          : "text-slate-400 hover:bg-white/[0.06] hover:text-white hover:border hover:border-white/5",
-                      )}
-                    >
-                      <item.icon
-                        size={16}
-                        className={cn(active ? "text-brand-400" : "text-slate-500 group-hover:text-slate-300")}
-                      />
-                      {item.label}
-                      {item.href === "/settings" && updateReady && (
-                        <span className="relative ml-auto flex h-1.5 w-1.5" title="Panel update available">
-                          <span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-amber-400 opacity-75" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <button
-            onClick={() => setPaletteOpen(true)}
-            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-500 transition hover:bg-white/[0.06] hover:text-slate-200 hover:border hover:border-white/5"
-          >
-            <Terminal size={16} className="text-slate-500" />
-            Quick find
-            <kbd className="ml-auto rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">
-              Ctrl K
-            </kbd>
-          </button>
-        </nav>
-
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
-          <p className="truncate text-xs font-semibold text-slate-200">{user.email}</p>
-          <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-400 font-mono">{user.role}</p>
-          <button
-            onClick={logout}
-            className="mt-2.5 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-400 transition hover:bg-white/10 hover:text-white"
-          >
-            <LogOut size={13} /> Sign out
-          </button>
-        </div>
-      </aside>
-
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        items={navItems.map((item) => ({
-          label: item.label,
-          hint: item.href,
-          run: () => router.push(item.href),
-        }))}
-      />
-
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-ink-950/60 px-4 py-3 backdrop-blur-2xl lg:hidden shadow-lg">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500">
-              <Terminal size={15} className="text-ink-950" />
-            </span>
-            <span className="text-sm font-semibold text-white">{panelName}</span>
-          </Link>
-          <nav className="flex gap-1 overflow-x-auto">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "rounded-lg p-2",
-                  pathname === item.href ? "bg-white/10 text-brand-400" : "text-slate-400",
-                )}
-                aria-label={item.label}
+        {/* Mobile drawer */}
+        <AnimatePresence>
+          {mobileOpen && (
+            <>
+              <motion.div
+                key="drawer-scrim"
+                className="fixed inset-0 z-50 bg-overlay/50 backdrop-blur-sm lg:hidden"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                onClick={() => setMobileOpen(false)}
+              />
+              <motion.aside
+                key="drawer"
+                className="fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-sidebar-border bg-sidebar lg:hidden"
+                initial={{ x: -300 }}
+                animate={{ x: 0 }}
+                exit={{ x: -300 }}
+                transition={{ type: "spring", stiffness: 380, damping: 36 }}
               >
-                <span className="relative">
-                  <item.icon size={16} />
-                  {item.href === "/settings" && updateReady && (
-                    <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  )}
-                </span>
-              </Link>
-            ))}
-          </nav>
-        </header>
+                <div className="flex h-16 items-center justify-between px-4">
+                  <Brand panelName={panelName} onNavigate={() => setMobileOpen(false)} />
+                  <button
+                    type="button"
+                    onClick={() => setMobileOpen(false)}
+                    aria-label="Close menu"
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+                <NavList
+                  pathname={pathname}
+                  layoutId="sidebar-active-mobile"
+                  updateReady={updateReady}
+                  onNavigate={() => setMobileOpen(false)}
+                  onQuickFind={() => setPaletteOpen(true)}
+                />
+                <div className="border-t border-sidebar-border p-3">
+                  <UserCard user={user} onLogout={logout} />
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-9">{children}</main>
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          items={paletteItems}
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Top bar */}
+          <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/75 px-4 backdrop-blur-xl sm:px-6">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-muted-foreground hover:bg-accent hover:text-accent-foreground lg:hidden"
+            >
+              <Menu size={17} />
+            </button>
+
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {panelName}
+              </p>
+              <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                {title}
+              </h1>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="hidden h-9 items-center gap-2 rounded-xl border border-border bg-card/60 px-3 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:inline-flex"
+              >
+                <Search size={14} />
+                Quick find
+                <Kbd>Ctrl K</Kbd>
+              </button>
+              <ThemeToggle />
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                title="Settings"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Settings size={16} />
+                {updateReady && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-background" />
+                )}
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Sign out"
+                title="Sign out"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </header>
+
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={pathname}
+                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
       </div>
     </div>
   );
@@ -252,9 +443,9 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl drop-shadow-sm">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{subtitle}</p>}
       </div>
       {action}
     </div>

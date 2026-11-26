@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
   Archive,
@@ -191,6 +192,7 @@ export default function OverviewPage() {
           spark={cpuSeries}
           icon={<Cpu size={18} />}
           glowColor="emerald"
+          delay={0}
         />
         <GlassStat
           title="Memory RAM"
@@ -201,6 +203,7 @@ export default function OverviewPage() {
           spark={memSeries}
           icon={<MemoryStick size={18} />}
           glowColor="sky"
+          delay={0.06}
         />
         <GlassStat
           title="NVMe Storage"
@@ -211,6 +214,7 @@ export default function OverviewPage() {
           spark={diskSeries}
           icon={<HardDrive size={18} />}
           glowColor="purple"
+          delay={0.12}
         />
         <GlassStat
           title="Docker Containers"
@@ -221,6 +225,7 @@ export default function OverviewPage() {
           icon={<Layers size={18} />}
           glowColor="teal"
           showBadge={`${stats.containers.running} active`}
+          delay={0.18}
         />
       </div>
 
@@ -450,6 +455,7 @@ function GlassStat({
   icon,
   glowColor,
   showBadge,
+  delay = 0,
 }: {
   title: string;
   value: string;
@@ -460,7 +466,9 @@ function GlassStat({
   icon: React.ReactNode;
   glowColor: "emerald" | "sky" | "purple" | "teal";
   showBadge?: string;
+  delay?: number;
 }) {
+  const reduceMotion = useReducedMotion();
   const glowMap = {
     emerald: "from-emerald-500/15 via-emerald-500/5 to-transparent",
     sky: "from-sky-500/15 via-sky-500/5 to-transparent",
@@ -484,7 +492,12 @@ function GlassStat({
   const stroke = strokeMap[tone];
 
   return (
-    <div className="glass-card glass-card-hover group p-5">
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] }}
+      className="glass-card glass-card-hover group p-5"
+    >
       {/* Specular glass line */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
       {/* Subtle radial inner glow */}
@@ -559,7 +572,7 @@ function GlassStat({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

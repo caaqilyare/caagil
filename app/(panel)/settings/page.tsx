@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  SunMoon,
   Trash2,
   User,
   X,
@@ -23,6 +24,7 @@ import { Badge, Button, Code, Field, Input, Select, cn } from "@/components/ui";
 import { SslBadge, SslFixModal, useSslStatus } from "@/components/ssl";
 import { UpdateCard } from "@/components/update-card";
 import { StorageCard } from "@/components/storage-card";
+import { ThemePicker } from "@/components/theme";
 import { usePanel } from "@/lib/client";
 import { CAAQIL_VERSION } from "@/lib/version";
 
@@ -384,6 +386,21 @@ export default function SettingsPage() {
 
       {/* Disk & Storage */}
       <StorageCard />
+
+      {/* Appearance */}
+      <div className="glass-card space-y-3 p-6">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+            <SunMoon size={14} />
+          </span>
+          Appearance
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Pick a light or dark theme, or follow your operating system. The choice is stored in this
+          browser only and applies instantly.
+        </p>
+        <ThemePicker />
+      </div>
 
       {/* ⚠️ DANGER ZONE: Factory Reset */}
       <div className="relative overflow-hidden rounded-3xl border border-rose-500/25 bg-gradient-to-br from-rose-950/20 via-ink-950/40 to-ink-950/60 p-6 backdrop-blur-3xl shadow-[0_12px_40px_0_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(244,63,94,0.15)]">

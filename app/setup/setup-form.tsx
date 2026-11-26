@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, Terminal } from "lucide-react";
 import { Button, Input } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme";
 
 export function SetupForm() {
   const router = useRouter();
@@ -43,6 +44,10 @@ export function SetupForm() {
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       <div className="pointer-events-none absolute inset-0 grid-lines opacity-40" />
       <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-[42rem] -translate-x-1/2 rounded-full bg-brand-500/15 blur-[120px]" />
+
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
 
       <div className="animate-fade-up relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">

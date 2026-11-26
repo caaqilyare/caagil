@@ -6,7 +6,7 @@ public access, manages MySQL users and phpMyAdmin, schedules cron jobs, takes
 backups, and ships an AI operator that can actually do the work.
 
 ```
-Panel UI      Next.js 15 (App Router) + Tailwind, dark glass UI
+Panel UI      Next.js 15 (App Router) + Tailwind, shadcn-style glass UI (light + dark)
 Panel data    MySQL 8.4 (sessions, apps, databases, domains, activity)
 Apps          Docker containers on the `caaqil` bridge network
 Routing       Traefik v3 + Let's Encrypt (HTTP-01), automatic HTTPS
@@ -120,6 +120,27 @@ at `GET /api/logs`.
 
 Press **Ctrl/Cmd + K** anywhere in the panel for quick page navigation.
 The sidebar is grouped into Overview / Hosting / Databases / Operations / System.
+
+## Appearance & themes
+
+The panel ships a shadcn-style design system built on CSS-variable tokens
+(`hsl(var(--…))`), Lucide icons and Framer Motion.
+
+- **Light / Dark / System** — switch with the sun/moon button in the top bar, or
+  pick explicitly in **Settings → Appearance**. The choice is stored per browser
+  (`localStorage: caaqil-theme`) and follows the OS while set to *System*.
+- **No flash** — a tiny inline script applies the theme class before the first
+  paint, so a light-mode user never sees a dark frame.
+- **Soft glow, not neon** — `.glow-soft` / `.glow-ring` use low-opacity rings and
+  wide blooms; ambient background blobs drop to 40% opacity in light mode to
+  keep contrast comfortable.
+- **Motion** — page transitions, the sidebar active indicator, modals, the
+  theme toggle and dashboard stat cards animate with Framer Motion and respect
+  `prefers-reduced-motion`.
+
+All existing screens were kept API-compatible: the light theme remaps the older
+`text-white` / `bg-white/*` / `border-white/*` / `bg-ink-*` utilities through a
+compatibility layer in `app/globals.css`, so no page had to be rewritten.
 
 ## Local development
 
