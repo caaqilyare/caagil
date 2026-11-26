@@ -23,6 +23,17 @@ import { changelogBullets, parseLatestSection } from "./changelog";
 
 const STATE_FILE = "/tmp/caaqil-update.state";
 const LOG_FILE = "/tmp/caaqil-update.log";
+const EXEC_TIMEOUT_MS = 30_000;
+
+/**
+ * Run git over HTTPS non-interactively and abort stalled transfers
+ * (<1 KB/s for 20s) instead of hanging for 10+ minutes.
+ */
+const GIT_NET = "GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20";
+
+function withTimeout(seconds: number, cmd: string): string {
+  return `if command -v timeout >/dev/null 2>&1; then timeout ${seconds} sh -c '${cmd}'; else ${cmd}; fi`;
+}
 
 export type UpdateState = "idle" | "running" | "done" | "error" | "unavailable";
 
@@ -62,6 +73,7 @@ async function updaterContainer() {
 async function execOutput(
   container: Awaited<ReturnType<typeof updaterContainer>>,
   cmd: string[],
+  timeoutMs = EXEC_TIMEOUT_MS,
 ): Promise<{ code: number; output: string }> {
   const exec = await container.exec({ Cmd: cmd, AttachStdout: true, AttachStderr: true });
   const stream = (await exec.start({ hijack: true, stdin: false })) as Readable;
@@ -71,10 +83,25 @@ async function execOutput(
   const chunks: Buffer[] = [];
   out.on("data", (c: Buffer) => chunks.push(c));
   err.on("data", (c: Buffer) => chunks.push(c));
+  let timedOut = false;
   await new Promise<void>((resolve, reject) => {
-    stream.on("end", resolve);
-    stream.on("error", reject);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stream.destroy();
+      resolve();
+    }, timeoutMs);
+    stream.on("end", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    stream.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
   });
+  if (timedOut) {
+    return { code: 124, output: Buffer.concat(chunks).toString("utf8").trim() || "timed out" };
+  }
   const info = (await exec.inspect()) as { ExitCode?: number };
   return { code: info.ExitCode ?? 1, output: Buffer.concat(chunks).toString("utf8").trim() };
 }
@@ -112,8 +139,33 @@ fi`,
   return { canRollback: false, previousCommit: null };
 }
 
-/** Ask the updater for origin/main and the last update state. */
+let inflightCheck: Promise<UpdateInfo> | null = null;
+
+async function readUpdaterStatus(
+  container: Awaited<ReturnType<typeof updaterContainer>>,
+): Promise<{ state: Exclude<UpdateState, "unavailable">; log: string }> {
+  const status = await execOutput(container, [
+    "sh",
+    "-lc",
+    `cat ${STATE_FILE} 2>/dev/null || echo idle; echo '---CAQ---'; tail -n 60 ${LOG_FILE} 2>/dev/null || true`,
+  ]);
+  const [statePart, ...logParts] = status.output.split("---CAQ---");
+  const raw = (statePart ?? "").trim().split("\n").pop()?.trim() ?? "idle";
+  const known = ["idle", "running", "done", "error"] as const;
+  const state = (known as readonly string[]).includes(raw) ? (raw as (typeof known)[number]) : "idle";
+  return { state, log: logParts.join("---CAQ---").trim() };
+}
+
+/** Ask the updater for origin/main and the last update state (coalesced). */
 export async function checkForUpdate(): Promise<UpdateInfo> {
+  if (inflightCheck) return inflightCheck;
+  inflightCheck = runCheckForUpdate().finally(() => {
+    inflightCheck = null;
+  });
+  return inflightCheck;
+}
+
+async function runCheckForUpdate(): Promise<UpdateInfo> {
   const current = runningCommit();
   let latest: string | null = null;
   let state: UpdateState = "unavailable";
@@ -127,13 +179,20 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
 
   try {
     const container = await updaterContainer();
-    const remote = await execOutput(container, [
-      "sh",
-      "-lc",
-      "cd /repo 2>/dev/null || exit 3; git fetch --quiet origin main >/dev/null 2>&1; git rev-parse origin/main 2>/dev/null || true",
-    ]);
+    const fetchCmd = withTimeout(25, `${GIT_NET} fetch --quiet origin main >/dev/null 2>&1`);
+    const remote = await execOutput(
+      container,
+      [
+        "sh",
+        "-lc",
+        `cd /repo 2>/dev/null || exit 3; ${fetchCmd}; git rev-parse origin/main 2>/dev/null || true`,
+      ],
+      30_000,
+    );
     if (remote.code === 3) {
       error = "The updater cannot see the install directory (/repo).";
+    } else if (remote.code === 124) {
+      error = "Timed out fetching origin/main from GitHub.";
     } else {
       latest = remote.output.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? null;
       if (!latest) error = "Could not read origin/main from GitHub.";
@@ -160,16 +219,9 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
       }
     }
 
-    const status = await execOutput(container, [
-      "sh",
-      "-lc",
-      `cat ${STATE_FILE} 2>/dev/null || echo idle; echo '---CAQ---'; tail -n 60 ${LOG_FILE} 2>/dev/null || true`,
-    ]);
-    const [statePart, ...logParts] = status.output.split("---CAQ---");
-    const raw = (statePart ?? "").trim().split("\n").pop()?.trim() ?? "idle";
-    const known = ["idle", "running", "done", "error"] as const;
-    state = (known as readonly string[]).includes(raw) ? (raw as (typeof known)[number]) : "idle";
-    log = logParts.join("---CAQ---").trim();
+    const status = await readUpdaterStatus(container);
+    state = status.state;
+    log = status.log;
     if (state === "error" && !error) error = "The last update failed. Check the log below.";
 
     // Rollback is offered when the panel is idle (not mid-update) and a
@@ -246,8 +298,8 @@ if [ -n "$PANEL_CID" ]; then
 fi
 
 echo "== fetching code from GitHub"
-if ! git pull --ff-only origin main; then
-  echo "== git pull failed"
+if ! ${withTimeout(120, `${GIT_NET} pull --ff-only origin main`)}; then
+  echo "== git pull failed or timed out after 120s"
   echo error > ${STATE_FILE}
   exit 5
 fi
@@ -365,7 +417,7 @@ if ! docker image inspect "$IMAGE_BASE:previous" >/dev/null 2>&1; then
 fi
 
 echo "== switching the checkout to $PREV_COMMIT"
-git fetch --quiet origin main 2>/dev/null || true
+${withTimeout(20, `${GIT_NET} fetch --quiet origin main 2>/dev/null || true`)}
 if ! git reset --hard "$PREV_COMMIT"; then
   echo "== could not check out the previous commit"
   echo error > ${STATE_FILE}
@@ -407,8 +459,8 @@ echo done > ${STATE_FILE}
  * Detached so the request can return before the panel container restarts. */
 export async function startUpdate(): Promise<{ started: true }> {
   const container = await updaterContainer();
-  const info = await checkForUpdate();
-  if (info.running) throw new Error("An update is already running.");
+  const status = await readUpdaterStatus(container);
+  if (status.state === "running") throw new Error("An update is already running.");
 
   const exec = await container.exec({
     Cmd: ["sh", "-lc", `${UPDATE_SCRIPT} >> ${LOG_FILE} 2>&1`],
@@ -422,9 +474,10 @@ export async function startUpdate(): Promise<{ started: true }> {
 /** One-click rollback to the previously tagged panel image. Detached. */
 export async function startRollback(): Promise<{ started: true }> {
   const container = await updaterContainer();
-  const info = await checkForUpdate();
-  if (info.running) throw new Error("An update is already running.");
-  if (!info.canRollback) {
+  const status = await readUpdaterStatus(container);
+  if (status.state === "running") throw new Error("An update is already running.");
+  const roll = await rollbackInfo(container);
+  if (!roll.canRollback) {
     throw new Error("No previous version is available to roll back to.");
   }
 

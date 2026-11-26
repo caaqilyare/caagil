@@ -1,4 +1,4 @@
-export const CAAQIL_VERSION = "1.6.0.2";
+export const CAAQIL_VERSION = "1.6.0.3";
 
 /**
  * Release versioning rule: every release increments the last segment by one.

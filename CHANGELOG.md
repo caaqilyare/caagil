@@ -3,6 +3,18 @@
 This file is read by the updater. The panel shows the newest section under
 **Settings → Panel updates → What's new** before you install an update.
 
+## 1.6.0.3 — Fix GitHub update fetch hanging for 10+ minutes
+
+- **Updater timeouts** — added a 30s timeout to Docker exec calls, a 25s
+  timeout to `checkForUpdate()` fetches, and a 120s timeout to `git pull` in
+  the update script so stalled GitHub connections fail fast instead of hanging.
+- **Non-interactive & low-speed abort** — `GIT_TERMINAL_PROMPT=0` and
+  `http.lowSpeedLimit=1000` / `http.lowSpeedTime=20` prevent `git` from waiting
+  on prompts or stalled sockets.
+- **Coalesced checks & fast start** — concurrent `checkForUpdate()` calls share
+  one in-flight fetch, and `startUpdate()` / `startRollback()` read the updater
+  state directly without blocking on a duplicate `git fetch`.
+
 ## 1.6.0.2 — AdminUX blue theme, components, shell & login redesign
 
 - **Color & typography system** — adopted the AdminUX `.theme-blue` palette
