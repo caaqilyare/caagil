@@ -226,6 +226,25 @@ If an update fails, the panel keeps running the old image and the log is shown
 in the overlay. Re-run `bash /opt/caaqil/scripts/install.sh` to restore the
 sidecar if it was removed.
 
+### Rollback safety net
+
+Before every update the running panel image is tagged `<image>:previous` and
+the current commit is recorded in `.env`. The updater then:
+
+1. pulls `origin/main` (`--ff-only`),
+2. rebuilds with BuildKit cache mounts (repeat updates reuse layers instead of
+   recompiling from zero),
+3. starts the new container without rebuilding again, and
+4. health-checks `http://panel:4000/login` for up to 90 s.
+
+If the new panel does not answer, it **rolls back automatically**: the previous
+image is retagged and restarted, and the checkout returns to the previous
+commit. The panel never stays broken.
+
+**Settings → Panel updates → Roll back** does the same thing on demand for the
+last successful update (instant — it retags the saved image, no rebuild). A
+rollback can itself be undone because the pointers are swapped.
+
 ## Create an app (domain or path)
 
 Apps → New application — a three-step wizard:
@@ -323,15 +342,48 @@ the probes.
   Let's Encrypt certificate → verifying HTTPS, and tells you exactly what failed
   (e.g. "does not resolve in DNS yet — add an A record → 193.x.x.x first").
 
-## Resource notes
+## Disk usage on small servers (15 GB)
 
-2 GB RAM is the floor. A busy stack (panel + MySQL + MongoDB + two apps) wants
-4 GB. The installer adds 4 GB swap so Docker builds do not OOM the host. Keep an
-eye on Settings → disk: build cache is the usual culprit.
+Caaqil keeps its own footprint bounded:
+
+| Item | Typical size | Guard |
+| --- | --- | --- |
+| Panel image | 450–650 MB | one image, rebuilt in place |
+| MySQL image + data | 600 MB–1.5 GB | binlogs disabled (`--disable-log-bin`) |
+| Traefik | ~180 MB | — |
+| Updater sidecar | ~60 MB | — |
+| Docker build cache | ≤ 1 GB | capped after every install and update |
+| Swap file | 1 GB | only created when RAM < 3 GB |
+| Container logs | ≤ 20 MB per container | `max-size 10m`, `max-file 2` (daemon-wide) |
+| App images | 150–600 MB each | PHP/Apache is the heavy one |
+
+A fresh install (OS + panel + MySQL + Traefik + one PHP app) is roughly
+**3.5–5 GB**. With a handful of apps and their data, **6–8 GB** is the normal
+range, leaving useful headroom on a 15 GB disk.
+
+> Older installs could reach 12 GB because the build cache grew without a cap,
+> container logs were unbounded and the installer created a 4 GB swap file.
+> Those are fixed, and the reclaim script below cleans an existing server.
+
+### Reclaim space (safe, one command)
 
 ```bash
-docker system prune -af --volumes   # reclaim space when needed
+sudo bash /opt/caaqil/scripts/reclaim-disk.sh          # safe cleanup
+sudo bash /opt/caaqil/scripts/reclaim-disk.sh --deep   # also drop the build cache
 ```
+
+It removes stopped containers, dangling images, unused networks, build cache
+beyond 1 GB, container logs over 20 MB, old journal files and APT caches, and
+shrinks a 2–4 GB swap file to 1 GB. It **never** removes volumes, running
+containers, tagged images (including the `:previous` rollback tag), site files
+or backups.
+
+The same actions are available in **Settings → Disk & Storage**: a live
+breakdown (images, containers, build cache, volumes, site files, backups), the
+reclaimable total, and **Safe cleanup** / **Deep clean** buttons.
+
+> ⚠️ Never run `docker system prune --volumes` or `docker volume prune` on this
+> server — that deletes the MySQL volume and your databases.
 
 ## Security model
 

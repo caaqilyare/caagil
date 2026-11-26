@@ -22,6 +22,7 @@ import {
 import { Badge, Button, Code, Field, Input, Select, cn } from "@/components/ui";
 import { SslBadge, SslFixModal, useSslStatus } from "@/components/ssl";
 import { UpdateCard } from "@/components/update-card";
+import { StorageCard } from "@/components/storage-card";
 import { usePanel } from "@/lib/client";
 import { CAAQIL_VERSION } from "@/lib/version";
 
@@ -380,6 +381,9 @@ export default function SettingsPage() {
         </p>
         <UpdateCard />
       </div>
+
+      {/* Disk & Storage */}
+      <StorageCard />
 
       {/* ⚠️ DANGER ZONE: Factory Reset */}
       <div className="relative overflow-hidden rounded-3xl border border-rose-500/25 bg-gradient-to-br from-rose-950/20 via-ink-950/40 to-ink-950/60 p-6 backdrop-blur-3xl shadow-[0_12px_40px_0_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(244,63,94,0.15)]">

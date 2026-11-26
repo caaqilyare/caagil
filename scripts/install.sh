@@ -35,11 +35,13 @@ if [ -n "$PANEL_DOMAIN" ] && ! printf '%s' "$PANEL_DOMAIN" | grep -Eq '^[a-z0-9]
   exit 1
 fi
 
-# ── swap: 2 GB hosts need headroom for Docker builds ──────────────
+# ── swap: small hosts need headroom for Docker builds ─────────────
+# 1 GB is enough for a 15 GB disk; a 4 GB swap file used to eat a quarter of
+# the whole server. Existing larger swap files are shrunk by reclaim-disk.sh.
 mem_mb=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
 if [ "$mem_mb" -lt 3000 ] && [ ! -f /swapfile ]; then
-  log "adding 2 GB swap (host has ${mem_mb} MB RAM)"
-  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+  log "adding 1 GB swap (host has ${mem_mb} MB RAM)"
+  fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
   swapon /swapfile
@@ -78,6 +80,36 @@ fi
 if ! docker compose version >/dev/null 2>&1; then
   warn "docker compose plugin missing — installing"
   apt-get install -y -qq docker-compose-v2 || apt-get install -y -qq docker-compose-plugin
+fi
+
+# ── disk guardrails (15 GB servers) ──────────────────────────────
+# Compose services already cap their logs, but the panel creates app
+# containers through the Docker API, so the daemon needs a global default.
+# Never overwrite an existing daemon.json (it may hold a custom data-root).
+if [ ! -f /etc/docker/daemon.json ]; then
+  log "enabling Docker log rotation (10 MB × 2 per container)"
+  mkdir -p /etc/docker
+  cat > /etc/docker/daemon.json <<'JSON'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "2"
+  }
+}
+JSON
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet docker; then
+    systemctl restart docker || warn "restart Docker to apply log rotation"
+  fi
+elif ! grep -q '"max-size"' /etc/docker/daemon.json; then
+  warn "/etc/docker/daemon.json exists without log rotation — add max-size/max-file manually"
+fi
+
+# Cap the systemd journal too; 200 MB is plenty for a single server.
+if [ -d /etc/systemd/journald.conf.d ]; then
+  printf '[Journal]\nSystemMaxUse=200M\nRuntimeMaxUse=64M\n' \
+    > /etc/systemd/journald.conf.d/99-caaqil.conf
+  systemctl restart systemd-journald >/dev/null 2>&1 || true
 fi
 
 
@@ -228,6 +260,13 @@ for i in $(seq 1 90); do
   sleep 2
 done
 
+# The build cache is only useful for the next update. Cap it at 1 GB so a
+# fresh install does not leave several GB of layers behind on a small disk.
+log "trimming Docker build cache (keeping 1 GB for fast updates)"
+docker builder prune -f --keep-storage 1GB >/dev/null 2>&1 || true
+docker image prune -f >/dev/null 2>&1 || true
+docker container prune -f >/dev/null 2>&1 || true
+
 panel_lines=""
 if [ -n "$PANEL_DOMAIN" ]; then
   panel_lines+="    Panel   https://${PANEL_DOMAIN}"$'\n'
@@ -252,5 +291,7 @@ ${panel_lines}${account_lines}    Data    ${DATA_DIR}
   Point an A record for ${PANEL_DOMAIN:-your domain} at ${ip} and Traefik issues
   the certificate on the first HTTPS request. Until then, use the IP address
   over HTTP (you can turn that off in Settings → Access).
+
+  Low on disk? Run:  sudo bash ${DIR}/scripts/reclaim-disk.sh
 
 EOF

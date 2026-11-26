@@ -1,1 +1,1 @@
-export const CAAQIL_VERSION = "1.3.0.2";
+export const CAAQIL_VERSION = "1.4.0";

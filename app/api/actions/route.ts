@@ -23,6 +23,7 @@ import * as pma from "@/lib/pma";
 import * as cronEngine from "@/lib/cron-engine";
 import { describeCron } from "@/lib/cron";
 import * as backups from "@/lib/backup";
+import * as storage from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -286,6 +287,21 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       return ops.testTarget(s("id"));
     case "target.query":
       return ops.targetQuery(s("id"), s("sql"));
+
+    /* storage */
+    case "storage.info":
+      return storage.storageInfo();
+    case "storage.cleanup": {
+      const result = await storage.cleanupStorage({ deep: Boolean(p.deep) });
+      await logActivity(
+        "storage.cleanup",
+        `Reclaimed ${storage.formatBytes(result.reclaimedBytes)} of disk space${
+          p.deep ? " (deep clean)" : ""
+        }`,
+        actor,
+      );
+      return result;
+    }
 
     /* settings */
     case "settings.profile": {
