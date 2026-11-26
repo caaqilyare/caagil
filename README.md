@@ -252,6 +252,26 @@ Settings → Panel:
 These write `/opt/caaqil/edge/panel.yml`, which Traefik watches. No restart and
 no compose edits.
 
+## Release versioning
+
+The project uses a four-segment version and **every release increments the last
+segment by exactly one**:
+
+```
+1.6.0.1  →  1.6.0.2  →  1.6.0.3  →  …
+```
+
+Versions are never skipped. A three-segment version gets `.1` on the next
+release (`1.6.0 → 1.6.0.1`). The rule is enforced mechanically:
+
+```bash
+npm run version:next    # print the next version, change nothing
+npm run version:bump    # write it to lib/version.ts, package.json, lockfile
+```
+
+Then add the matching section at the top of `CHANGELOG.md`, commit, tag that
+exact version, and publish the release.
+
 ## Update the panel from GitHub
 
 Every install includes an `updater` sidecar with the git checkout and the
@@ -260,9 +280,12 @@ few minutes (and on demand with the refresh icon):
 
 1. A pulsing **Update available** badge appears when GitHub has new commits,
    with `main @ abc1234 · you run def5678`.
-2. **Update now** runs `git pull --ff-only`, rebuilds only the panel image and
+2. **What's new** shows the newest `CHANGELOG.md` section from `origin/main`
+   (version, title and bullet points) in the card and in the full update
+   dialog, so you can see the UI changes, fixes and features before installing.
+3. **Update now** runs `git pull --ff-only`, rebuilds only the panel image and
    recreates only the panel container. MySQL, apps and volumes keep running.
-3. A progress overlay shows each step and the live build log; the page reloads
+4. A progress overlay shows each step and the live build log; the page reloads
    by itself when the new panel answers.
 
 The running commit is baked into the image (`CAAQIL_COMMIT`) by

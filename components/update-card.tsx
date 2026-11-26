@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpCircle, Check, Loader2, RefreshCw, RotateCcw, X } from "lucide-react";
+import { ArrowUpCircle, Check, Loader2, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
 import { Button, cn } from "./ui";
 
 type Info = {
@@ -14,6 +14,9 @@ type Info = {
   error?: string;
   canRollback?: boolean;
   previousCommit?: string | null;
+  latestVersion?: string | null;
+  latestTitle?: string | null;
+  changes?: string[];
 };
 
 const short = (sha: string | null | undefined) => (sha && sha !== "unknown" ? sha.slice(0, 7) : "—");
@@ -127,6 +130,7 @@ export function UpdateCard() {
   }
 
   const log = info?.log ?? "";
+  const changes = info?.changes ?? [];
   const isRollback = log.includes("rollback started");
   const step = done || info?.state === "done"
     ? 3
@@ -216,6 +220,42 @@ export function UpdateCard() {
                       ? "Re-run scripts/install.sh once to enable in-panel updates."
                       : `main @ ${short(info.latest)} · you run ${short(info.current)}`}
           </p>
+          {available && (
+            <div className="mt-2 rounded-lg border border-amber-400/20 bg-black/10 p-2.5">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
+                <Sparkles size={11} /> What&apos;s new
+                {info.latestVersion ? ` in v${info.latestVersion}` : ""}
+              </p>
+              {info.latestTitle && (
+                <p className="mt-1 text-[11px] font-medium leading-snug text-slate-200">
+                  {info.latestTitle}
+                </p>
+              )}
+              {changes.length > 0 ? (
+                <ul className="mt-1.5 space-y-1">
+                  {changes.slice(0, 4).map((line, i) => (
+                    <li key={i} className="flex gap-1.5 text-[10px] leading-relaxed text-slate-400">
+                      <span className="mt-0.5 text-amber-300">•</span>
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Changelog not available yet — the update itself is unaffected.
+                </p>
+              )}
+              {changes.length > 4 && (
+                <button
+                  type="button"
+                  onClick={() => setOpen(true)}
+                  className="mt-1.5 text-[10px] text-amber-200/90 underline-offset-2 hover:underline"
+                >
+                  +{changes.length - 4} more in the full list
+                </button>
+              )}
+            </div>
+          )}
           {available && (
             <Button size="sm" className="mt-2 w-full" onClick={start}>
               <ArrowUpCircle size={13} /> Update now
@@ -325,6 +365,28 @@ export function UpdateCard() {
                 );
               })}
             </ol>
+
+            {available && (info?.latestVersion || changes.length > 0) && (
+              <div className="mt-4 rounded-xl border border-border/60 bg-black/10 p-3">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200/90">
+                  <Sparkles size={12} /> What&apos;s new
+                  {info?.latestVersion ? ` in v${info.latestVersion}` : ""}
+                </p>
+                {info?.latestTitle && (
+                  <p className="mt-1 text-xs font-medium text-slate-200">{info.latestTitle}</p>
+                )}
+                {changes.length > 0 && (
+                  <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                    {changes.map((line, i) => (
+                      <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-slate-400">
+                        <span className="mt-0.5 shrink-0 text-amber-300">•</span>
+                        <span>{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {error && (
               <p className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">

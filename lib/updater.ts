@@ -19,6 +19,7 @@ import { PassThrough } from "node:stream";
 import type { Readable } from "node:stream";
 import { docker } from "./docker";
 import { isUpdateAvailable } from "./update-version";
+import { changelogBullets, parseLatestSection } from "./changelog";
 
 const STATE_FILE = "/tmp/caaqil-update.state";
 const LOG_FILE = "/tmp/caaqil-update.log";
@@ -39,6 +40,11 @@ export type UpdateInfo = {
   canRollback?: boolean;
   /** Commit the rollback would restore. */
   previousCommit?: string | null;
+  /** Newest changelog version/title from origin/main. */
+  latestVersion?: string | null;
+  latestTitle?: string | null;
+  /** Bullet points for the incoming release, shown before installing. */
+  changes?: string[];
 };
 
 async function updaterContainer() {
@@ -115,6 +121,9 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
   let error: string | undefined;
   let canRollback = false;
   let previousCommit: string | null = null;
+  let latestVersion: string | null = null;
+  let latestTitle: string | null = null;
+  let changes: string[] = [];
 
   try {
     const container = await updaterContainer();
@@ -128,6 +137,27 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     } else {
       latest = remote.output.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? null;
       if (!latest) error = "Could not read origin/main from GitHub.";
+    }
+
+    // Changelog for the incoming release: best-effort, never blocks an update.
+    if (latest) {
+      try {
+        const notes = await execOutput(container, [
+          "sh",
+          "-lc",
+          "cd /repo 2>/dev/null || exit 3; git show origin/main:CHANGELOG.md 2>/dev/null || true",
+        ]);
+        if (notes.code === 0 && notes.output) {
+          const section = parseLatestSection(notes.output.slice(0, 16_000));
+          if (section) {
+            latestVersion = section.version;
+            latestTitle = section.title;
+            changes = changelogBullets(section.body, 10);
+          }
+        }
+      } catch {
+        /* changelog is optional */
+      }
     }
 
     const status = await execOutput(container, [
@@ -164,6 +194,9 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     log,
     ...(error ? { error } : {}),
     ...(canRollback ? { canRollback, previousCommit } : {}),
+    ...(latestVersion ? { latestVersion } : {}),
+    ...(latestTitle ? { latestTitle } : {}),
+    ...(changes.length ? { changes } : {}),
   };
 }
 

@@ -1,13 +1,15 @@
 {
   "name": "caaqil",
-  "version": "1.6.0",
+  "version": "1.6.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev -p 4000",
     "build": "next build",
     "start": "next start -p 4000",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "version:next": "node scripts/next-version.mjs",
+    "version:bump": "node scripts/next-version.mjs --write"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
