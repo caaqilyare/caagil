@@ -392,6 +392,11 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       }
       if (p.aiProvider !== undefined) await setSetting("ai_provider", s("aiProvider"));
       if (p.aiModel !== undefined) await setSetting("ai_model", s("aiModel"));
+      if (p.aiCustomBaseUrl !== undefined) await setSetting("ai_custom_base_url", s("aiCustomBaseUrl"));
+      if (p.aiCustomProtocol !== undefined) await setSetting("ai_custom_protocol", s("aiCustomProtocol"));
+      if (p.aiCustomModelId !== undefined) await setSetting("ai_custom_model_id", s("aiCustomModelId"));
+      if (p.aiCustomModelName !== undefined) await setSetting("ai_custom_model_name", s("aiCustomModelName"));
+      if (p.aiCustomRules !== undefined) await setSetting("ai_custom_rules", s("aiCustomRules") || null);
       const keys = (p.keys as Record<string, string>) ?? {};
       for (const [provider, value] of Object.entries(keys)) {
         await setSetting(`ai_${provider}_key`, value);

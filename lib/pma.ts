@@ -23,6 +23,7 @@ import { panelEdgeSettings } from "./edge";
 import { ensurePmaUser, pmaCredentials } from "./mysqladmin";
 
 export const PMA_IMAGE = "phpmyadmin:5.2-apache";
+export const PMA_SPEC_NAME = "phpmyadmin";
 export const PMA_CONTAINER = "caaqil-phpmyadmin";
 export const PMA_TOKEN_TTL_MS = 60 * 1000;
 export const PMA_PATH = "/pma";
@@ -48,7 +49,10 @@ function tokenHash(token: string): string {
 
 async function internalSecret(): Promise<string> {
   const existing = await getSetting("pma_internal_secret");
-  if (existing) return existing;
+  if (existing) {
+    const decrypted = decryptSecret(existing);
+    if (decrypted) return decrypted;
+  }
   const secret = randomToken(32);
   await setSetting("pma_internal_secret", encryptSecret(secret));
   return secret;
@@ -78,8 +82,8 @@ $cfg['AllowBreakpoint'] = false;
 $cfg['MaxKeyLength'] = 64;
 $cfg['CollationTables'] = 'utf8mb4_general_ci,utf8mb4_unicode_ci,utf8_general_ci,utf8_unicode_ci';
 
-$cfg['Servers'][1]['host'] = 'mysql';
-$cfg['Servers'][1]['port'] = 3306;
+$cfg['Servers'][1]['host'] = ${JSON.stringify(process.env.PANEL_DB_HOST || "mysql")};
+$cfg['Servers'][1]['port'] = ${Number(process.env.PANEL_DB_PORT || 3306)};
 $cfg['Servers'][1]['auth_type'] = 'signon';
 /* SignonSession/SignonURL are per-server settings — phpMyAdmin ignores the
    global form, which made every signon attempt fall back to a cookie login. */
@@ -138,6 +142,15 @@ exit;
 `;
 }
 
+async function writeRegularFile(filePath: string, content: string): Promise<void> {
+  const stat = await fs.lstat(filePath).catch(() => null);
+  if (stat?.isDirectory()) {
+    await fs.rm(filePath, { recursive: true, force: true });
+  }
+  await fs.writeFile(filePath, content, { encoding: "utf8", mode: 0o644 });
+  await fs.chmod(filePath, 0o644).catch(() => {});
+}
+
 /** Write the mounted assets (config + signon bridge) with the current host. */
 export async function writePmaAssets(): Promise<void> {
   const baseUrl = await pmaBaseUrl();
@@ -146,8 +159,8 @@ export async function writePmaAssets(): Promise<void> {
   }
   const secret = await internalSecret();
   await fs.mkdir(PMA_DIR, { recursive: true });
-  await fs.writeFile(CONFIG_FILE, renderConfigUserInc(baseUrl), "utf8");
-  await fs.writeFile(SIGNON_FILE, renderSignonScript(secret, baseUrl), "utf8");
+  await writeRegularFile(CONFIG_FILE, renderConfigUserInc(baseUrl));
+  await writeRegularFile(SIGNON_FILE, renderSignonScript(secret, baseUrl));
 }
 
 /* ───────────────────────────── container lifecycle ───────────────────────────── */
@@ -193,11 +206,12 @@ export async function ensurePmaContainer(actor = "system"): Promise<PmaStatus> {
   const host = edge.domain ?? (edge.allowIp && edge.ip ? edge.ip : null);
   if (!host) throw new Error("Set a panel domain or enable IP access in Settings before starting phpMyAdmin.");
 
+  await removeContainerSafe(null, PMA_SPEC_NAME);
   await removeContainerSafe(null, PMA_CONTAINER);
   await pullIfMissing(PMA_IMAGE);
 
-  const container = await runContainer({
-    name: PMA_CONTAINER,
+  await runContainer({
+    name: PMA_SPEC_NAME,
     image: PMA_IMAGE,
     port: 80,
     env: {
@@ -220,6 +234,7 @@ export async function ensurePmaContainer(actor = "system"): Promise<PmaStatus> {
 }
 
 export async function stopPma(actor = "system"): Promise<PmaStatus> {
+  await removeContainerSafe(null, PMA_SPEC_NAME);
   await removeContainerSafe(null, PMA_CONTAINER);
   await logActivity("pma.stop", "phpMyAdmin container removed", actor);
   return pmaStatus();
@@ -292,7 +307,12 @@ export async function exchangeToken(
   if (!user) return { ok: false, error: "user gone" };
 
   const creds = await pmaCredentials();
-  return { ok: true, ...creds, host: "mysql", port: 3306 };
+  return {
+    ok: true,
+    ...creds,
+    host: process.env.PANEL_DB_HOST || "mysql",
+    port: Number(process.env.PANEL_DB_PORT || 3306),
+  };
 }
 
 /** Housekeeping: drop expired or used tokens. */

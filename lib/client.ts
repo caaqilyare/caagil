@@ -40,7 +40,16 @@ export type PanelState = {
     allowIp: boolean;
     ip: string | null;
   };
-  ai: { provider: string; model: string; label: string; hasKey: boolean };
+  ai: {
+    provider: string;
+    model: string;
+    modelName?: string;
+    baseUrl?: string;
+    protocol?: "openai" | "anthropic";
+    label: string;
+    hasKey: boolean;
+    customRules?: string;
+  };
   providers: { id: string; label: string; models: string[] }[];
   presets: RuntimePreset[];
   engines: DbEngine[];

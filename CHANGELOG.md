@@ -3,6 +3,25 @@
 This file is read by the updater. The panel shows the newest section under
 **Settings → Panel updates → What's new** before you install an update.
 
+## 1.6.0.4 — phpMyAdmin fix, MongoDB Studio redesign, AI Memory/History/App Editor & Custom AI API
+
+- **phpMyAdmin fixed** — `internalSecret()` now decrypts the stored secret instead
+  of returning the encrypted `v1:...` blob, container naming avoids the double
+  `caaqil-caaqil-phpmyadmin` prefix, and asset writing removes stale directories
+  and sets `0644` permissions so `www-data` can always read the signon bridge.
+- **MongoDB Studio redesign** — upgraded `MongoStudioCard` with an AdminUX
+  gradient hero header, live status pulse, encrypted credential vault with
+  one-click copy & reveal, and cleaner Start/Open actions.
+- **AI Operator Memory, Chat History & App Editor** — added `ai_threads` and
+  `ai_memories` tables, chat history sidebar (`+ New Chat`, thread switching &
+  deletion), persistent memory (`remember_fact`, `list_memories`, `forget_memory`),
+  custom AI rules (`ai_custom_rules`), and app file tools (`list_app_files`,
+  `read_app_file`, `write_app_file`, `mkdir_app`, `delete_app_file`) so the AI
+  can design and edit apps directly.
+- **Custom AI Provider in Settings** — added `Custom API` provider with API Base
+  URL (link), protocol (`OpenAI-compatible` / `Anthropic-compatible`), Model ID,
+  Model Name, API Key, and Custom AI Operator Rules.
+
 ## 1.6.0.3 — Fix GitHub update fetch hanging for 10+ minutes
 
 - **Updater timeouts** — added a 30s timeout to Docker exec calls, a 25s

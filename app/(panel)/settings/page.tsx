@@ -20,7 +20,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { Badge, Button, Code, Field, Input, Select, cn } from "@/components/ui";
+import { Badge, Button, Code, Field, Input, Select, Textarea, cn } from "@/components/ui";
 import { SslBadge, SslFixModal, useSslStatus } from "@/components/ssl";
 import { UpdateCard } from "@/components/update-card";
 import { StorageCard } from "@/components/storage-card";
@@ -39,6 +39,11 @@ export default function SettingsPage() {
   const [allowIp, setAllowIp] = useState(false);
   const [provider, setProvider] = useState("deepseek");
   const [model, setModel] = useState("deepseek-chat");
+  const [customBaseUrl, setCustomBaseUrl] = useState("");
+  const [customProtocol, setCustomProtocol] = useState<"openai" | "anthropic">("openai");
+  const [customModelId, setCustomModelId] = useState("");
+  const [customModelName, setCustomModelName] = useState("");
+  const [customRules, setCustomRules] = useState("");
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -58,6 +63,11 @@ export default function SettingsPage() {
     setAllowIp(state.panel.allowIp);
     setProvider(state.ai.provider);
     setModel(state.ai.model);
+    setCustomBaseUrl(state.ai.baseUrl ?? "");
+    setCustomProtocol(state.ai.protocol ?? "openai");
+    setCustomModelId(state.ai.provider === "custom" ? state.ai.model : "");
+    setCustomModelName(state.ai.modelName ?? "");
+    setCustomRules(state.ai.customRules ?? "");
   }, [state]);
 
   const providerMeta = state?.providers.find((p) => p.id === provider);
@@ -77,7 +87,12 @@ export default function SettingsPage() {
         publicIp,
         allowIpAccess: allowIp,
         aiProvider: provider,
-        aiModel: model,
+        aiModel: provider === "custom" ? customModelId : model,
+        aiCustomBaseUrl: customBaseUrl,
+        aiCustomProtocol: customProtocol,
+        aiCustomModelId: customModelId,
+        aiCustomModelName: customModelName,
+        aiCustomRules: customRules,
         keys: Object.fromEntries(Object.entries(keys).filter(([, v]) => v !== "")),
       });
       setSaved(true);
@@ -299,7 +314,7 @@ export default function SettingsPage() {
                 onChange={(e) => {
                   setProvider(e.target.value);
                   const meta = state?.providers.find((p) => p.id === e.target.value);
-                  if (meta) setModel(meta.models[0]);
+                  if (meta && meta.models.length > 0) setModel(meta.models[0]);
                 }}
                 className="bg-black/20 border-white/10"
               >
@@ -311,31 +326,77 @@ export default function SettingsPage() {
               </Select>
             </Field>
 
-            <Field label="Model">
-              {providerMeta ? (
+            {provider === "custom" ? (
+              <Field label="API Protocol">
                 <Select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
+                  value={customProtocol}
+                  onChange={(e) => setCustomProtocol(e.target.value === "anthropic" ? "anthropic" : "openai")}
                   className="bg-black/20 border-white/10"
                 >
-                  {providerMeta.models.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
+                  <option value="openai">OpenAI-compatible (/v1)</option>
+                  <option value="anthropic">Anthropic-compatible</option>
                 </Select>
-              ) : (
-                <Input
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="bg-black/20 border-white/10"
-                />
-              )}
-            </Field>
+              </Field>
+            ) : (
+              <Field label="Model">
+                {providerMeta && providerMeta.models.length > 0 ? (
+                  <Select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="bg-black/20 border-white/10"
+                  >
+                    {providerMeta.models.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="bg-black/20 border-white/10"
+                  />
+                )}
+              </Field>
+            )}
           </div>
 
+          {provider === "custom" && (
+            <div className="space-y-3 rounded-[var(--radius)] border border-primary/20 bg-primary/5 p-3.5">
+              <Field
+                label="API Base URL (Link)"
+                hint="e.g. https://openrouter.ai/api/v1 or https://api.groq.com/openai/v1"
+              >
+                <Input
+                  value={customBaseUrl}
+                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  placeholder="https://openrouter.ai/api/v1"
+                  className="font-mono"
+                />
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Model ID" hint="Exact ID sent to the API">
+                  <Input
+                    value={customModelId}
+                    onChange={(e) => setCustomModelId(e.target.value)}
+                    placeholder="anthropic/claude-3.5-sonnet"
+                    className="font-mono"
+                  />
+                </Field>
+                <Field label="Model Name" hint="Display name in panel">
+                  <Input
+                    value={customModelName}
+                    onChange={(e) => setCustomModelName(e.target.value)}
+                    placeholder="My Custom Model"
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+
           <Field
-            label={`${providerMeta?.label ?? provider} API Key`}
+            label={`${provider === "custom" ? (customModelName || "Custom API") : (providerMeta?.label ?? provider)} API Key`}
             hint="Stored encrypted in your MySQL database. Server-side only."
           >
             <Input
@@ -345,6 +406,18 @@ export default function SettingsPage() {
               placeholder="sk-…"
               autoComplete="off"
               className="bg-black/20 border-white/10 font-mono"
+            />
+          </Field>
+
+          <Field
+            label="Custom AI Operator Rules"
+            hint="Optional instructions the AI Operator always follows (e.g. coding style, language, design system)."
+          >
+            <Textarea
+              value={customRules}
+              onChange={(e) => setCustomRules(e.target.value)}
+              placeholder="e.g. Always use Tailwind CSS with clean blue/white AdminUX styling when designing apps."
+              className="min-h-[84px]"
             />
           </Field>
 

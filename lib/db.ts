@@ -122,6 +122,24 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   INDEX(thread)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS ai_threads (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(40) NOT NULL,
+  title VARCHAR(160) NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  INDEX(user_id, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_memories (
+  id VARCHAR(40) PRIMARY KEY,
+  user_id VARCHAR(40) NOT NULL,
+  content TEXT NOT NULL,
+  category VARCHAR(40) NOT NULL DEFAULT 'general',
+  created_at BIGINT NOT NULL,
+  INDEX(user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS metrics (
   ts BIGINT PRIMARY KEY,
   cpu FLOAT NOT NULL,

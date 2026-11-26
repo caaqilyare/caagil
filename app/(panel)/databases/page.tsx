@@ -731,107 +731,142 @@ function MongoStudioCard({
   }
 
   return (
-    <GlassPanel accent="cyan" className="space-y-3 p-5" interactive={false}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-sky-400">
-            <Braces size={16} />
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <StatusDot ok={running} />
-              <h3 className="text-sm font-semibold text-white">{db.name}</h3>
-              <Badge tone="info">MongoDB {db.version}</Badge>
+    <GlassPanel
+      accent="cyan"
+      className="overflow-hidden p-0 transition-all hover:shadow-[0_12px_32px_-12px_rgba(0,73,232,0.28)]"
+      interactive={false}
+    >
+      {/* Amazing AdminUX Gradient Hero Header */}
+      <div className="bg-theme-r-gradient relative px-5 py-4 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-white/25 backdrop-blur-md">
+              <Braces size={18} />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold tracking-tight text-white">{db.name}</h3>
+                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                  MongoDB {db.version}
+                </span>
+              </div>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/80">
+                <span
+                  className={cn(
+                    "inline-block h-2 w-2 rounded-full",
+                    running ? "bg-emerald-300 shadow-[0_0_8px_#6ee7b7]" : "bg-white/40",
+                  )}
+                />
+                {running ? "Studio running" : installed ? "Studio stopped" : "Studio not installed"} ·{" "}
+                <span className="font-mono">db-{db.name}:{db.port}</span>
+              </p>
             </div>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              internal <Code>{`db-${db.name}`}</Code> · port {db.port}
-            </p>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {running && studio?.url ? (
-            <>
-              <Button
-                size="sm"
-                onClick={() => window.open(studio.url as string, "_blank", "noopener,noreferrer")}
+
+          <div className="flex flex-wrap gap-2">
+            {running && studio?.url ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => window.open(studio.url as string, "_blank", "noopener,noreferrer")}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-white px-3.5 text-xs font-semibold text-[#0049e8] shadow-sm transition hover:bg-white/90"
+                >
+                  <ExternalLink size={13} /> Open Studio
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === `mongo-stop-${db.name}`}
+                  onClick={onStop}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-3 text-xs font-medium text-white transition hover:bg-white/20 disabled:opacity-50"
+                >
+                  <Square size={12} /> Stop
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={busy === `mongo-start-${db.name}`}
+                onClick={onStart}
+                className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-white px-3.5 text-xs font-semibold text-[#0049e8] shadow-sm transition hover:bg-white/90 disabled:opacity-50"
               >
-                <ExternalLink size={13} /> Open studio
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                loading={busy === `mongo-stop-${db.name}`}
-                onClick={onStop}
-              >
-                <Square size={13} /> Stop
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              loading={busy === `mongo-start-${db.name}`}
-              onClick={onStart}
-            >
-              <Play size={13} /> {installed ? "Start studio" : "Install studio"}
-            </Button>
-          )}
+                <Play size={13} />
+                {busy === `mongo-start-${db.name}`
+                  ? "Starting..."
+                  : installed
+                    ? "Start Studio"
+                    : "Install & Start Studio"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {studio?.error && (
-        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-          {studio.error}
-        </p>
-      )}
+      {/* Body */}
+      <div className="space-y-3 p-5">
+        {studio?.error && (
+          <p className="rounded-[var(--radius)] border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-500 dark:text-amber-300">
+            {studio.error}
+          </p>
+        )}
 
-      {studio?.username && studio?.password ? (
-        <div className="space-y-1.5 rounded-xl border border-border/60 bg-black/20 p-3 font-mono text-[11px] text-slate-300">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500">user</span>
-            <Code>{studio.username}</Code>
-            <button
-              type="button"
-              className="ml-auto text-slate-500 hover:text-white"
-              onClick={() => void copy("user", studio.username)}
-              aria-label="Copy studio username"
-            >
-              {copied === "user" ? <Check size={12} /> : <Copy size={12} />}
-            </button>
+        {studio?.username && studio?.password ? (
+          <div className="space-y-2 rounded-[var(--radius)] border border-border/70 bg-muted/40 p-3.5 font-mono text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Username
+              </span>
+              <div className="flex items-center gap-2">
+                <Code>{studio.username}</Code>
+                <button
+                  type="button"
+                  className="rounded-lg p-1 text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                  onClick={() => void copy("user", studio.username)}
+                  aria-label="Copy studio username"
+                >
+                  {copied === "user" ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Password
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="max-w-[180px] truncate font-semibold text-primary">
+                  {reveal ? studio.password : "••••••••••••••••"}
+                </span>
+                <button
+                  type="button"
+                  className="rounded-lg p-1 text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                  onClick={() => setReveal((v) => !v)}
+                  aria-label="Toggle studio password"
+                >
+                  {reveal ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg p-1 text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                  onClick={() => void copy("pass", studio.password)}
+                  aria-label="Copy studio password"
+                >
+                  {copied === "pass" ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500">pass</span>
-            <span className="truncate text-sky-300">
-              {reveal ? studio.password : "••••••••••••••••"}
-            </span>
-            <button
-              type="button"
-              className="text-slate-500 hover:text-white"
-              onClick={() => setReveal((v) => !v)}
-              aria-label="Toggle studio password"
-            >
-              {reveal ? <EyeOff size={12} /> : <Eye size={12} />}
-            </button>
-            <button
-              type="button"
-              className="text-slate-500 hover:text-white"
-              onClick={() => void copy("pass", studio.password)}
-              aria-label="Copy studio password"
-            >
-              {copied === "pass" ? <Check size={12} /> : <Copy size={12} />}
-            </button>
+        ) : (
+          <div className="rounded-[var(--radius)] border border-dashed border-border px-4 py-5 text-center text-xs text-muted-foreground">
+            Click <strong className="text-foreground">Install &amp; Start Studio</strong> to launch mongo-express and generate your encrypted access credentials.
           </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <ShieldCheck size={14} className="shrink-0 text-primary" />
+            Protected by Traefik basic auth at <Code>/mongo/{db.name}/</Code>
+          </span>
         </div>
-      ) : (
-        <p className="rounded-xl border border-dashed border-border/60 px-3 py-4 text-center text-[11px] text-slate-500">
-          Start the studio to generate its basic-auth credentials.
-        </p>
-      )}
-
-      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500">
-        <ShieldCheck size={13} className="mt-0.5 shrink-0 text-sky-400" />
-        mongo-express runs only while started, behind Traefik basic auth at{" "}
-        <Code>/mongo/{db.name}/</Code>. The password is stored encrypted and never appears in a URL.
-      </p>
+      </div>
     </GlassPanel>
   );
 }
