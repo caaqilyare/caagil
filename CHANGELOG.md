@@ -3,6 +3,23 @@
 This file is read by the updater. The panel shows the newest section under
 **Settings → Panel updates → What's new** before you install an update.
 
+## 1.6.0.2 — AdminUX blue theme, components, shell & login redesign
+
+- **Color & typography system** — adopted the AdminUX `.theme-blue` palette
+  (`#0049e8` primary, `#4cbdff` secondary, `#03045e` / `#ab13c5` accents,
+  `#eef3fc` → `#bfdbfb` radial background gradient) with `SUSE` headings and
+  `Open Sans` body typography, plus matching dark-mode tokens (`#01051b` → `#09113d`).
+- **Buttons, cards & list components** — updated `Button` variants (`primary`,
+  `accent`, `outline`, `dashed`, `subtle`, `success`, `danger`, `lg` / `icon`),
+  `Card` (`1.15rem` radius, clean light surface, hover lift), and added
+  `ListGroup` / `ListItem` (`default` and borderless `minimal` variants).
+- **Shell & navigation** — 280px frosted-glass sidebar with `#0049e8` active pill,
+  68px topbar that transitions from transparent to frosted glass on scroll, and
+  centered `300px` Quick Find search bar.
+- **Login page** — full-bleed AdminUX gradient backdrop, transparent header,
+  centered `426px` rounded card with password visibility toggle, full-width
+  `Login` button, and `#0049e8` footer bar.
+
 ## 1.6.0.1 — Update details in the panel + release versioning rule
 
 - **What's new panel** — when an update is available the panel now shows the

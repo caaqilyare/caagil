@@ -1,76 +1,96 @@
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=SUSE:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Design tokens — shadcn-style HSL variables.
-   :root = light theme, .dark = dark theme. The inline script in app/layout.tsx
-   sets the class before paint, so there is no flash.
+   AdminUX Design Tokens — shadcn-style HSL variables + AdminUIUX tokens.
+   :root = light theme (.theme-blue), .dark = dark theme.
    ────────────────────────────────────────────────────────────────────────── */
 
 @layer base {
   :root {
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue",
-      Arial, sans-serif;
+    --font-sans: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-title: "SUSE", "Open Sans", -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --radius: 0.75rem;
+    --radius: 1.15rem;
+
+    /* AdminUX .theme-blue tokens */
+    --adminuiux-theme-1: #0049e8;
+    --adminuiux-theme-1-hover: #003fc7;
+    --adminuiux-theme-1-active: #0037ad;
+    --adminuiux-theme-2: #4cbdff;
+    --adminuiux-theme-accent-1: #03045e;
+    --adminuiux-theme-accent-2: #ab13c5;
+    --adminuiux-bg-1: #eef3fc;
+    --adminuiux-bg-2: #bfdbfb;
 
     /* light */
-    --background: 210 25% 98%;
-    --foreground: 222 47% 11%;
+    --background: 218 70% 96%;
+    --foreground: 0 0% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 0 0% 13%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 158 74% 33%;
+    --popover-foreground: 0 0% 13%;
+    --primary: 221 100% 45%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 24% 94%;
-    --secondary-foreground: 222 47% 15%;
-    --muted: 210 24% 94%;
-    --muted-foreground: 215 16% 44%;
-    --accent: 158 55% 94%;
-    --accent-foreground: 158 80% 22%;
-    --destructive: 0 72% 46%;
+    --secondary: 216 24% 94%;
+    --secondary-foreground: 216 18% 32%;
+    --muted: 216 32% 94%;
+    --muted-foreground: 216 18% 48%;
+    --accent: 221 100% 96%;
+    --accent-foreground: 221 100% 45%;
+    --destructive: 354 70% 54%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 22% 88%;
-    --input: 214 22% 86%;
-    --ring: 158 74% 33%;
-    --glow: 158 74% 40%;
+    --border: 210 14% 87%;
+    --input: 210 14% 85%;
+    --ring: 221 100% 45%;
+    --glow: 221 100% 45%;
     --sidebar: 0 0% 100%;
-    --sidebar-foreground: 222 47% 18%;
-    --sidebar-border: 214 22% 90%;
+    --sidebar-foreground: 216 18% 48%;
+    --sidebar-border: 210 14% 90%;
     --surface: 0 0% 100%;
-    --surface-2: 210 24% 96%;
-    --overlay: 222 47% 11%;
+    --surface-2: 218 65% 97%;
+    --overlay: 231 90% 12%;
   }
 
   .dark {
-    --background: 222 47% 4%;
-    --foreground: 213 31% 91%;
-    --card: 222 34% 7%;
-    --card-foreground: 213 31% 91%;
-    --popover: 222 34% 7%;
-    --popover-foreground: 213 31% 91%;
-    --primary: 158 84% 45%;
-    --primary-foreground: 222 47% 4%;
-    --secondary: 217 26% 14%;
+    --adminuiux-theme-1: #1960fa;
+    --adminuiux-theme-1-hover: #3375ff;
+    --adminuiux-theme-1-active: #0049e8;
+    --adminuiux-theme-2: #4cbdff;
+    --adminuiux-theme-accent-1: #03045e;
+    --adminuiux-theme-accent-2: #ab13c5;
+    --adminuiux-bg-1: #01051b;
+    --adminuiux-bg-2: #09113d;
+
+    --background: 231 90% 6%;
+    --foreground: 213 31% 92%;
+    --card: 231 64% 11%;
+    --card-foreground: 213 31% 92%;
+    --popover: 231 64% 11%;
+    --popover-foreground: 213 31% 92%;
+    --primary: 221 96% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 226 42% 16%;
     --secondary-foreground: 213 31% 91%;
-    --muted: 217 26% 13%;
-    --muted-foreground: 215 20% 62%;
-    --accent: 158 50% 15%;
-    --accent-foreground: 158 84% 72%;
-    --destructive: 0 72% 51%;
+    --muted: 226 38% 15%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 221 75% 18%;
+    --accent-foreground: 202 100% 65%;
+    --destructive: 354 72% 54%;
     --destructive-foreground: 0 0% 100%;
-    --border: 215 25% 17%;
-    --input: 215 25% 19%;
-    --ring: 158 84% 45%;
-    --glow: 158 84% 45%;
-    --sidebar: 222 45% 5%;
+    --border: 225 40% 20%;
+    --input: 225 40% 22%;
+    --ring: 221 96% 54%;
+    --glow: 221 96% 54%;
+    --sidebar: 231 74% 8%;
     --sidebar-foreground: 213 25% 82%;
-    --sidebar-border: 215 25% 14%;
-    --surface: 222 34% 7%;
-    --surface-2: 222 30% 10%;
-    --overlay: 222 47% 4%;
+    --sidebar-border: 225 40% 16%;
+    --surface: 231 64% 11%;
+    --surface-2: 231 54% 14%;
+    --overlay: 231 90% 4%;
   }
 
   * {
@@ -87,10 +107,15 @@
 
   body {
     height: 100%;
-    background-color: hsl(var(--background));
+    background-color: var(--adminuiux-bg-1);
     color: hsl(var(--foreground));
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-title);
   }
 
   ::selection {
@@ -273,10 +298,48 @@
   }
 
   .text-gradient {
-    background: linear-gradient(120deg, hsl(var(--foreground)), hsl(var(--primary)));
+    background: linear-gradient(to right, var(--adminuiux-theme-2) 0%, var(--adminuiux-theme-accent-2) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+
+  /* AdminUX gradient & glass utilities */
+  .bg-r-gradient {
+    background-color: var(--adminuiux-bg-1);
+    background-image: radial-gradient(circle at 20% 15%, var(--adminuiux-bg-1) 15%, var(--adminuiux-bg-2) 100%);
+  }
+
+  .bg-theme-r-gradient {
+    background: radial-gradient(circle at 30% 30%, var(--adminuiux-theme-2) 0%, var(--adminuiux-theme-1) 95%);
+    color: #ffffff;
+  }
+
+  .bg-theme-l-gradient {
+    background: linear-gradient(225deg, var(--adminuiux-theme-2) 0%, var(--adminuiux-theme-1) 100%);
+    color: #ffffff;
+  }
+
+  .bg-theme-accent-r-gradient {
+    background: radial-gradient(circle at 30% 30%, var(--adminuiux-theme-accent-2) 0%, var(--adminuiux-theme-accent-1) 95%);
+    color: #ffffff;
+  }
+
+  .bg-l-gradient-light {
+    background: linear-gradient(to bottom, hsl(var(--primary) / 0) 15%, hsl(var(--primary) / 0.14) 100%);
+  }
+
+  .bg-blur {
+    background-color: hsl(var(--card) / 0.85);
+    backdrop-filter: blur(15px);
+  }
+
+  .adminuiux-list-item {
+    border-radius: var(--radius);
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .adminuiux-list-item:hover {
+    background-color: hsl(var(--primary) / 0.08);
   }
 
   .no-scrollbar::-webkit-scrollbar {

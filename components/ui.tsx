@@ -14,26 +14,34 @@ export function cn(...inputs: ClassValue[]) {
 /* ───────────────────────────── buttons ───────────────────────────── */
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:scale-[.985]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius)] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:scale-[.985]",
   {
     variants: {
       variant: {
         primary:
-          "bg-primary text-primary-foreground shadow-[0_10px_30px_-14px_hsl(var(--glow)/.55)] hover:bg-primary/90 hover:shadow-[0_16px_38px_-16px_hsl(var(--glow)/.65)]",
+          "bg-[#0049e8] text-white shadow-[0_8px_24px_-10px_rgba(0,73,232,0.55)] hover:bg-[#003fc7] active:bg-[#0037ad]",
+        accent:
+          "bg-[#03045e] text-white shadow-sm hover:bg-[#01024b] active:bg-[#010235]",
         secondary:
-          "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/70",
+          "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:
-          "border border-border bg-transparent text-foreground hover:border-primary/25 hover:bg-accent hover:text-accent-foreground",
-        subtle: "border border-border bg-muted text-foreground hover:bg-muted/70",
+          "bg-transparent text-muted-foreground hover:bg-primary/10 hover:text-primary",
+        subtle:
+          "bg-primary/12 text-primary hover:bg-primary/20",
         danger:
           "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20",
+        success:
+          "bg-[#6faa00] text-white shadow-sm hover:bg-[#5e9100]",
         outline:
-          "border border-input bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+          "border border-primary/75 bg-transparent text-primary hover:bg-primary/85 hover:text-white",
+        dashed:
+          "border border-dashed border-primary/70 bg-transparent text-primary hover:bg-primary/10",
       },
       size: {
-        sm: "h-8 px-3 text-xs",
-        md: "h-10 px-4 text-sm",
-        icon: "h-9 w-9",
+        sm: "h-8 rounded-lg px-3 text-xs",
+        md: "h-[38px] px-4 text-sm",
+        lg: "h-12 rounded-3xl px-5 text-base",
+        icon: "h-[38px] w-[38px] p-0",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },
@@ -114,8 +122,80 @@ export function Field({
 
 /* ─────────────────────────────── misc ───────────────────────────── */
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("card p-5", className)}>{children}</div>;
+export function Card({
+  className,
+  children,
+  hover,
+}: {
+  className?: string;
+  children: ReactNode;
+  hover?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "card p-5",
+        hover && "glass-card-hover cursor-pointer",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function ListGroup({
+  variant = "default",
+  className,
+  children,
+}: {
+  variant?: "default" | "minimal";
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <ul
+      className={cn(
+        "rounded-[var(--radius)]",
+        variant === "default"
+          ? "divide-y divide-border overflow-hidden border border-border bg-card"
+          : "space-y-1 bg-transparent",
+        className,
+      )}
+    >
+      {children}
+    </ul>
+  );
+}
+
+export function ListItem({
+  active,
+  interactive = true,
+  className,
+  children,
+  onClick,
+}: {
+  active?: boolean;
+  interactive?: boolean;
+  className?: string;
+  children: ReactNode;
+  onClick?: () => void;
+}) {
+  return (
+    <li
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-between gap-3 px-4 py-2.5 text-sm transition-colors",
+        interactive && "cursor-pointer",
+        active
+          ? "bg-primary text-primary-foreground font-medium"
+          : interactive && "hover:bg-primary/10 hover:text-foreground",
+        className,
+      )}
+    >
+      {children}
+    </li>
+  );
 }
 
 export function Badge({

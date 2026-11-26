@@ -13,12 +13,15 @@ export function AuroraBackground({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={cn("pointer-events-none fixed inset-0 -z-10 overflow-hidden", className)}
+      className={cn(
+        "pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-r-gradient",
+        className,
+      )}
     >
-      <div className="aurora aurora-blue absolute -top-60 left-[-12%] h-[640px] w-[640px] rounded-full blur-3xl" />
-      <div className="aurora aurora-cyan absolute right-[-14%] top-1/4 h-[560px] w-[560px] rounded-full blur-3xl" />
-      <div className="aurora aurora-white absolute -bottom-60 left-1/3 h-[600px] w-[600px] rounded-full blur-3xl" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(217_91%_60%/0.07),transparent_62%)]" />
+      <div className="aurora aurora-blue absolute -top-56 left-[-10%] h-[600px] w-[600px] rounded-full blur-3xl" />
+      <div className="aurora aurora-cyan absolute right-[-12%] top-1/4 h-[520px] w-[520px] rounded-full blur-3xl" />
+      <div className="aurora aurora-white absolute -bottom-56 left-1/3 h-[560px] w-[560px] rounded-full blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(221_100%_45%/0.06),transparent_62%)]" />
     </div>
   );
 }

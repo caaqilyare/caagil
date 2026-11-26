@@ -81,15 +81,15 @@ function pageTitle(pathname: string) {
 function Brand({ panelName, onNavigate }: { panelName: string; onNavigate?: () => void }) {
   return (
     <Link href="/" onClick={onNavigate} className="flex min-w-0 items-center gap-2.5">
-      <span className="glow-soft flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 via-emerald-400 to-teal-500">
-        <Terminal size={17} className="text-ink-950" strokeWidth={2.6} />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#0049e8] text-white shadow-sm">
+        <Terminal size={17} strokeWidth={2.5} />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-bold tracking-tight text-foreground">
+        <span className="block truncate text-base font-bold leading-tight tracking-tight text-foreground">
           {panelName}
         </span>
-        <span className="block font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-          cloud panel
+        <span className="block text-[11px] leading-tight text-muted-foreground">
+          Cloud Control Panel
         </span>
       </span>
     </Link>
@@ -110,13 +110,13 @@ function NavList({
   onQuickFind: () => void;
 }) {
   return (
-    <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-3">
+    <nav className="flex-1 space-y-4 overflow-y-auto px-4 pb-3 pt-1">
       {NAV_GROUPS.map((group) => (
         <div key={group.group}>
-          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
             {group.group}
           </p>
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {group.items.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -126,20 +126,20 @@ function NavList({
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
+                    "group relative flex items-center gap-2.5 rounded-[var(--radius)] px-3.5 py-2.5 text-sm transition-colors",
                     active
-                      ? "font-medium text-primary"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      ? "font-medium text-white"
+                      : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                   )}
                 >
                   {active && (
                     <motion.span
                       layoutId={layoutId}
-                      className="absolute inset-0 rounded-xl border border-primary/20 bg-accent"
+                      className="absolute inset-0 rounded-[var(--radius)] bg-primary shadow-sm"
                       transition={{ type: "spring", stiffness: 420, damping: 34 }}
                     />
                   )}
-                  <item.icon size={16} className="relative z-10 shrink-0" />
+                  <item.icon size={18} className="relative z-10 shrink-0" />
                   <span className="relative z-10 truncate">{item.label}</span>
                   {item.href === "/settings" && updateReady && (
                     <span
@@ -163,7 +163,7 @@ function NavList({
           onQuickFind();
           onNavigate?.();
         }}
-        className="flex w-full items-center gap-2.5 rounded-xl border border-border/60 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        className="flex w-full items-center gap-2.5 rounded-[var(--radius)] border border-border/70 bg-card/60 px-3.5 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
       >
         <Search size={16} className="shrink-0" />
         Quick find
@@ -222,6 +222,16 @@ export function Shell({
   const [updateReady, setUpdateReady] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    function onScroll() {
+      setScrolled(window.scrollY > 10);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Ctrl/Cmd+K opens the command palette.
   useEffect(() => {
@@ -281,14 +291,14 @@ export function Shell({
   );
 
   return (
-    <div className="relative isolate min-h-screen bg-background text-foreground">
-      {/* Blue-white aurora — soft, low opacity, calmer in light mode. */}
+    <div className="relative isolate min-h-screen text-foreground">
+      {/* AdminUX radial gradient + soft blue-white aurora */}
       <AuroraBackground />
 
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar/80 backdrop-blur-xl lg:flex">
-          <div className="flex h-16 items-center px-5">
+        {/* Desktop sidebar (AdminUX 280px frosted glass) */}
+        <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 flex-col bg-white/55 shadow-sm backdrop-blur-[15px] dark:bg-card/65 lg:flex">
+          <div className="flex h-[68px] items-center px-5">
             <Brand panelName={panelName} />
           </div>
           <NavList
@@ -297,7 +307,7 @@ export function Shell({
             updateReady={updateReady}
             onQuickFind={() => setPaletteOpen(true)}
           />
-          <div className="border-t border-sidebar-border p-3">
+          <div className="p-3">
             <UserCard user={user} onLogout={logout} />
           </div>
         </aside>
@@ -356,13 +366,20 @@ export function Shell({
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Top bar */}
-          <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/75 px-4 backdrop-blur-xl sm:px-6">
+          {/* Top bar (AdminUX 68px, transparent -> frosted glass on scroll) */}
+          <header
+            className={cn(
+              "sticky top-0 z-30 flex h-[68px] items-center gap-3 px-4 transition-all duration-200 sm:px-6",
+              scrolled
+                ? "bg-white/80 shadow-[0_5px_15px_rgba(0,0,0,0.08)] backdrop-blur-[12px] dark:bg-card/85"
+                : "bg-transparent",
+            )}
+          >
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-muted-foreground hover:bg-accent hover:text-accent-foreground lg:hidden"
+              className="inline-flex h-[38px] w-[38px] items-center justify-center rounded-[var(--radius)] bg-card/80 text-muted-foreground shadow-sm hover:bg-primary/10 hover:text-primary lg:hidden"
             >
               <Menu size={17} />
             </button>
@@ -371,31 +388,33 @@ export function Shell({
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {panelName}
               </p>
-              <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+              <h1 className="truncate text-base font-semibold tracking-tight text-foreground">
                 {title}
               </h1>
             </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPaletteOpen(true)}
-                className="hidden h-9 items-center gap-2 rounded-xl border border-border bg-card/60 px-3 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:inline-flex"
-              >
-                <Search size={14} />
-                Quick find
-                <Kbd>Ctrl K</Kbd>
-              </button>
+            {/* Centered AdminUX Search Bar (300x42px) */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="mx-auto hidden h-[42px] w-[300px] items-center gap-2.5 rounded-[var(--radius)] bg-card/90 px-3.5 text-sm text-muted-foreground shadow-sm transition-colors hover:bg-card hover:text-primary md:inline-flex"
+            >
+              <Search size={15} className="shrink-0" />
+              <span className="truncate">Search anything...</span>
+              <Kbd className="ml-auto">Ctrl K</Kbd>
+            </button>
+
+            <div className="ml-auto flex items-center gap-2 md:ml-0">
               <ThemeToggle />
               <Link
                 href="/settings"
                 aria-label="Settings"
                 title="Settings"
-                className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="relative inline-flex h-[38px] w-[38px] items-center justify-center rounded-[var(--radius)] bg-card/80 text-muted-foreground shadow-sm transition-colors hover:bg-primary/10 hover:text-primary"
               >
                 <Settings size={16} />
                 {updateReady && (
-                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-background" />
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-card" />
                 )}
               </Link>
               <button
@@ -403,7 +422,7 @@ export function Shell({
                 onClick={logout}
                 aria-label="Sign out"
                 title="Sign out"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/60 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="inline-flex h-[38px] w-[38px] items-center justify-center rounded-[var(--radius)] bg-card/80 text-muted-foreground shadow-sm transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
                 <LogOut size={16} />
               </button>
