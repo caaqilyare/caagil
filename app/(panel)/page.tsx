@@ -96,11 +96,6 @@ export default function OverviewPage() {
 
   return (
     <div className="relative space-y-6 pb-12">
-      {/* Decorative ambient background glows behind glass */}
-      <div className="pointer-events-none absolute -top-16 left-1/4 h-80 w-80 rounded-full bg-brand-500/10 blur-[100px]" />
-      <div className="pointer-events-none absolute top-40 right-10 h-72 w-72 rounded-full bg-sky-500/10 blur-[100px]" />
-      <div className="pointer-events-none absolute top-96 left-10 h-64 w-64 rounded-full bg-purple-500/10 blur-[110px]" />
-
       {/* Hero Glass Banner */}
       <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-white/[0.09] via-white/[0.04] to-white/[0.02] p-6 sm:p-7 shadow-[0_16px_50px_0_rgba(0,0,0,0.5),inset_0_1px_1px_0_rgba(255,255,255,0.25)] backdrop-blur-3xl">
         {/* Subtle glass reflection highlight on top */}

@@ -18,7 +18,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execute, one, getSetting, setSetting, logActivity } from "./db";
 import { randomToken, encryptSecret, decryptSecret, safeEqual } from "./crypto";
-import { DATA_DIR, docker, pullIfMissing, removeContainerSafe, runContainer, traefikLabels } from "./docker";
+import { DATA_DIR, HOST_DATA_DIR, docker, pullIfMissing, removeContainerSafe, runContainer, traefikLabels } from "./docker";
 import { panelEdgeSettings } from "./edge";
 import { ensurePmaUser, pmaCredentials } from "./mysqladmin";
 
@@ -27,8 +27,12 @@ export const PMA_CONTAINER = "caaqil-phpmyadmin";
 export const PMA_TOKEN_TTL_MS = 60 * 1000;
 export const PMA_PATH = "/pma";
 const PMA_DIR = path.join(DATA_DIR, "pma");
+/** Host-side paths: bind sources are resolved by the Docker daemon, not by us. */
+const PMA_HOST_DIR = path.join(HOST_DATA_DIR, "pma");
 const CONFIG_FILE = path.join(PMA_DIR, "config.user.inc.php");
 const SIGNON_FILE = path.join(PMA_DIR, "signon-caaqil.php");
+const HOST_CONFIG_FILE = path.join(PMA_HOST_DIR, "config.user.inc.php");
+const HOST_SIGNON_FILE = path.join(PMA_HOST_DIR, "signon-caaqil.php");
 
 export type PmaStatus = {
   installed: boolean;
@@ -64,8 +68,6 @@ function renderConfigUserInc(baseUrl: string): string {
   return `<?php
 /* Caaqil phpMyAdmin configuration — written by the panel, do not edit by hand. */
 $cfg['auth_type'] = 'signon';
-$cfg['SignonSession'] = 'phpMyAdmin';
-$cfg['SignonURL'] = ${JSON.stringify(`${baseUrl}/signon-caaqil.php`)};
 $cfg['PMA_Absolute_Uri'] = ${JSON.stringify(`${baseUrl}/`)};
 $cfg['PmaAbsoluteUri'] = ${JSON.stringify(`${baseUrl}/`)};
 $cfg['AllowArbitraryServer'] = false;
@@ -79,6 +81,10 @@ $cfg['CollationTables'] = 'utf8mb4_general_ci,utf8mb4_unicode_ci,utf8_general_ci
 $cfg['Servers'][1]['host'] = 'mysql';
 $cfg['Servers'][1]['port'] = 3306;
 $cfg['Servers'][1]['auth_type'] = 'signon';
+/* SignonSession/SignonURL are per-server settings — phpMyAdmin ignores the
+   global form, which made every signon attempt fall back to a cookie login. */
+$cfg['Servers'][1]['SignonSession'] = 'CaaqilSignon';
+$cfg['Servers'][1]['SignonURL'] = ${JSON.stringify(`${baseUrl}/signon-caaqil.php`)};
 $cfg['Servers'][1]['hide_db'] = '';
 $cfg['Servers'][1]['only_db'] = '';
 `;
@@ -93,8 +99,11 @@ function renderSignonScript(secret: string, baseUrl: string): string {
  * Exchanges a single-use token for limited MySQL credentials and starts a
  * phpMyAdmin signon session. Credentials never appear in URLs or logs.
  */
-$session_name = 'phpMyAdmin';
+$session_name = 'CaaqilSignon';
 session_name($session_name);
+/* Without an active session the credentials below are never persisted and
+   phpMyAdmin always bounced back to its login form. */
+session_start();
 
 $t = isset($_GET['t']) ? rawurlencode($_GET['t']) : '';
 if ($t === '') {
@@ -197,8 +206,8 @@ export async function ensurePmaContainer(actor = "system"): Promise<PmaStatus> {
       PMA_ABSOLUTE_URI: `${await pmaBaseUrl()}/`,
     },
     binds: [
-      `${CONFIG_FILE}:/etc/phpmyadmin/config.user.inc.php:ro`,
-      `${SIGNON_FILE}:/var/www/html/signon-caaqil.php:ro`,
+      `${HOST_CONFIG_FILE}:/etc/phpmyadmin/config.user.inc.php:ro`,
+      `${HOST_SIGNON_FILE}:/var/www/html/signon-caaqil.php:ro`,
     ],
     labels: {
       ...traefikLabels("pma", [{ host, path: PMA_PATH, strip: true }], 80),

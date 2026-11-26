@@ -22,6 +22,7 @@ Deploy        docker compose up -d --build  (portable, single directory)
 | WordPress one-click | Auto-install with its own MySQL database, admin user + password, and a live URL — cPanel/Softaculous style |
 | Source | Clone from Git over HTTPS/SSH, redeploy with one click |
 | Databases | MySQL, MariaDB, PostgreSQL, MongoDB, Redis — on the internal network as `db-<name>` |
+| MongoDB Studio | Per-database mongo-express at `/mongo/<name>/` behind Traefik basic auth — start/stop from the panel |
 | MySQL administration | Create/drop schemas, manage users + grants, export/import SQL dumps on the panel's own MySQL server |
 | phpMyAdmin | One-click phpMyAdmin at `<panel>/pma` with one-time signon tokens — no root exposure, no passwords in URLs |
 | Remote DB | Publish a public port + `'user'@'%'` grant, or attach an external MySQL and query it read-only |
@@ -57,6 +58,29 @@ appear in URLs, referrer headers or logs, and the token cannot be replayed.
 Changing the panel domain/IP in Settings automatically recreates the container
 with the new routing labels. Stop removes the container; starting again is
 one click.
+
+**Fixed in v1.6.0:** the signon bridge now calls `session_start()` before writing
+the `PMA_single_signon_*` values (without it every signon bounced back to the
+login form), `SignonSession`/`SignonURL` are set per server as phpMyAdmin
+expects, the signon session has its own name (`CaaqilSignon`), and the config
+files are mounted from the **host** data path (`HOST_DATA_DIR`) instead of the
+panel container's internal path.
+
+## MongoDB Studio
+
+Databases → **MongoDB Studio** appears for every panel-created MongoDB
+database. It is a per-database [mongo-express](https://github.com/mongo-express/mongo-express)
+container (`mongo-express:1.0.2-20`):
+
+- **Start studio** creates `caaqil-mongo-studio-<name>`, connects it with that
+  database's own root credentials over the internal `db-<name>` alias, and
+  routes it at `https://<panel-domain>/mongo/<name>/`.
+- **Basic auth** is enforced by Traefik. The username is `caaqil` and the
+  password is generated once, stored encrypted in the panel database, and shown
+  in the card (reveal/copy). It never appears in a URL.
+- **Stop studio** removes the container; the MongoDB database itself keeps
+  running. Deleting the database removes its studio and stored credentials too.
+- Changing the panel domain/IP recreates running studios with the new labels.
 
 ## MySQL administration
 
@@ -134,6 +158,10 @@ The panel ships a shadcn-style design system built on CSS-variable tokens
 - **Soft glow, not neon** — `.glow-soft` / `.glow-ring` use low-opacity rings and
   wide blooms; ambient background blobs drop to 40% opacity in light mode to
   keep contrast comfortable.
+- **Blue-white aurora glass** — a fixed backdrop of blue, cyan and white blobs
+  (`.aurora`) lights the shadcn-style `.glass-panel` cards from v1.6.0. Cards
+  and lists stagger in with Framer Motion (`GlowList` / `GlowItem`) and lift on
+  hover; light mode tones the aurora down to 42%.
 - **Motion** — page transitions, the sidebar active indicator, modals, the
   theme toggle and dashboard stat cards animate with Framer Motion and respect
   `prefers-reduced-motion`.

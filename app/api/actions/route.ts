@@ -20,6 +20,7 @@ import {
   importDatabase,
 } from "@/lib/mysqladmin";
 import * as pma from "@/lib/pma";
+import * as mongoStudio from "@/lib/mongo-studio";
 import * as cronEngine from "@/lib/cron-engine";
 import { describeCron } from "@/lib/cron";
 import * as backups from "@/lib/backup";
@@ -170,6 +171,14 @@ async function run(action: string, p: Record<string, unknown>, actor: string, us
       await logActivity("pma.launch", "phpMyAdmin session opened", actor);
       return launch;
     }
+
+    /* MongoDB Studio */
+    case "mongo.status":
+      return mongoStudio.mongoStudioStatus(s("name"));
+    case "mongo.start":
+      return mongoStudio.ensureMongoStudio(s("name"), actor);
+    case "mongo.stop":
+      return mongoStudio.stopMongoStudio(s("name"), actor);
 
     /* managed mysql admin */
     case "mysqldb.info":

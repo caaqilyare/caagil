@@ -23,6 +23,7 @@ import {
 import { cn, Kbd } from "./ui";
 import { CommandPalette } from "./command-palette";
 import { ThemeToggle } from "./theme";
+import { AuroraBackground } from "./glow";
 
 type NavItem = {
   href: string;
@@ -280,13 +281,9 @@ export function Shell({
   );
 
   return (
-    <div className="relative min-h-screen bg-background text-foreground">
-      {/* Ambient light — soft, low opacity, calmer in light mode (see globals). */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="ambient absolute -top-48 left-[-12%] h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.22),transparent_65%)] blur-3xl" />
-        <div className="ambient absolute right-[-15%] top-1/3 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.16),transparent_65%)] blur-3xl" />
-        <div className="ambient absolute -bottom-48 left-1/3 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.12),transparent_65%)] blur-3xl" />
-      </div>
+    <div className="relative isolate min-h-screen bg-background text-foreground">
+      {/* Blue-white aurora — soft, low opacity, calmer in light mode. */}
+      <AuroraBackground />
 
       <div className="flex min-h-screen">
         {/* Desktop sidebar */}

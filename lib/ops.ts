@@ -1045,6 +1045,13 @@ export async function databaseAction(
 
   if (action === "delete") {
     await removeContainerSafe(db.container_id, `db-${db.name}`);
+    // Drop the optional MongoDB studio and its stored basic-auth credentials.
+    try {
+      const { removeMongoStudio } = await import("./mongo-studio");
+      await removeMongoStudio(db.name);
+    } catch {
+      /* studio is optional; deleting the database must always succeed */
+    }
     try {
       await docker.getVolume(db.volume!).remove();
     } catch {
@@ -1494,6 +1501,12 @@ export async function savePanelAccess(input: PanelAccessInput, actor = "system")
       await refreshPmaIfRunning();
     } catch {
       /* phpMyAdmin is optional; access changes must never fail because of it */
+    }
+    try {
+      const { refreshMongoStudiosIfRunning } = await import("./mongo-studio");
+      await refreshMongoStudiosIfRunning();
+    } catch {
+      /* MongoDB Studio is optional too */
     }
   }
 

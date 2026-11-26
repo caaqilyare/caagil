@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Braces,
+  Check,
+  Copy,
   Database,
   Download,
   ExternalLink,
@@ -13,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Server,
+  ShieldCheck,
   Square,
   Terminal,
   Trash2,
@@ -35,6 +39,7 @@ import {
   StatusDot,
 } from "@/components/ui";
 import { usePanel } from "@/lib/client";
+import { GlassPanel, GlowItem, GlowList } from "@/components/glow";
 import type { DatabaseRow, TargetRow } from "@/lib/ops";
 import type { DbEngine } from "@/lib/presets";
 
@@ -60,6 +65,16 @@ type MysqlInfoT = {
 type ManagedDb = { name: string; sizeMb: number; tables: number; app: string | null };
 type DbUserT = { name: string; host: string; databases: string[] };
 
+type MongoStudioT = {
+  database: string;
+  installed: boolean;
+  running: boolean;
+  url: string | null;
+  username: string | null;
+  password: string | null;
+  error?: string;
+};
+
 export default function DatabasesPage() {
   const { state, loading, act } = usePanel();
   const [createOpen, setCreateOpen] = useState(false);
@@ -76,6 +91,11 @@ export default function DatabasesPage() {
   const [newDbOpen, setNewDbOpen] = useState(false);
   const [newUserOpen, setNewUserOpen] = useState(false);
   const [importFor, setImportFor] = useState<string | null>(null);
+
+  // MongoDB Studio (mongo-express), one per managed MongoDB database.
+  const [studios, setStudios] = useState<Record<string, MongoStudioT>>({});
+  const mongoDatabases = (state?.databases ?? []).filter((db) => db.engine === "mongo");
+  const mongoKey = mongoDatabases.map((db) => db.name).join(",");
 
   const refreshMysql = useCallback(async () => {
     try {
@@ -119,6 +139,19 @@ export default function DatabasesPage() {
     try {
       const status = await act<PmaStatus>(action);
       setPma(status);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runStudio(name: string, action: "start" | "stop") {
+    setBusy(`mongo-${action}-${name}`);
+    setError(null);
+    try {
+      const status = await act<MongoStudioT>(`mongo.${action}`, { name });
+      setStudios((cur) => ({ ...cur, [name]: status }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -170,6 +203,35 @@ export default function DatabasesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!mongoKey) {
+      setStudios({});
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      const names = mongoKey.split(",");
+      const pairs = await Promise.all(
+        names.map(async (name) => {
+          try {
+            return [name, await act<MongoStudioT>("mongo.status", { name })] as const;
+          } catch {
+            return [name, null] as const;
+          }
+        }),
+      );
+      if (!alive) return;
+      const next: Record<string, MongoStudioT> = {};
+      for (const [name, status] of pairs) if (status) next[name] = status;
+      setStudios(next);
+    })();
+    return () => {
+      alive = false;
+    };
+    // The key changes only when the set of MongoDB databases changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mongoKey]);
+
   return (
     <>
       <PageHeader
@@ -206,17 +268,18 @@ export default function DatabasesPage() {
           }
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <GlowList className="grid gap-3 lg:grid-cols-2">
           {state.databases.map((db) => (
-            <DbCard
-              key={db.id}
-              db={db}
-              publicIp={state.publicIp}
-              busy={busy}
-              onAction={run}
-            />
+            <GlowItem key={db.id}>
+              <DbCard
+                db={db}
+                publicIp={state.publicIp}
+                busy={busy}
+                onAction={run}
+              />
+            </GlowItem>
           ))}
-        </div>
+        </GlowList>
       )}
 
       <div className="mt-8">
@@ -284,6 +347,33 @@ export default function DatabasesPage() {
           }}
         />
       </div>
+
+      {/* MongoDB Studio */}
+      {mongoDatabases.length > 0 && (
+        <div className="mt-8">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Braces size={14} className="text-sky-400" /> MongoDB Studio
+            </h2>
+            <span className="text-[11px] text-slate-500">
+              One mongo-express instance per database · basic auth
+            </span>
+          </div>
+          <GlowList className="grid gap-3 lg:grid-cols-2">
+            {mongoDatabases.map((db) => (
+              <GlowItem key={db.name}>
+                <MongoStudioCard
+                  db={db}
+                  studio={studios[db.name] ?? null}
+                  busy={busy}
+                  onStart={() => void runStudio(db.name, "start")}
+                  onStop={() => void runStudio(db.name, "stop")}
+                />
+              </GlowItem>
+            ))}
+          </GlowList>
+        </div>
+      )}
 
       {/* Managed MySQL administration */}
       <div className="mt-8">
@@ -523,7 +613,7 @@ function PmaCard({
 }) {
   if (!status) {
     return (
-      <Card className="flex flex-wrap items-center justify-between gap-3 py-3">
+      <GlassPanel className="flex flex-wrap items-center justify-between gap-3 p-4" interactive={false}>
         <div>
           <p className="text-sm font-medium text-white">phpMyAdmin</p>
           <p className="text-[11px] text-slate-500">
@@ -533,12 +623,12 @@ function PmaCard({
         <Button size="sm" variant="ghost" onClick={() => void onAction("pma.status")}>
           <RefreshCw size={13} /> Retry
         </Button>
-      </Card>
+      </GlassPanel>
     );
   }
 
   return (
-    <Card className="space-y-3">
+    <GlassPanel className="space-y-3 p-5" interactive={false}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-brand-400">
@@ -607,7 +697,142 @@ function PmaCard({
         URLs. The phpMyAdmin MySQL user is limited to the panel&apos;s managed app databases; root
         credentials are never shared with it.
       </p>
-    </Card>
+    </GlassPanel>
+  );
+}
+
+function MongoStudioCard({
+  db,
+  studio,
+  busy,
+  onStart,
+  onStop,
+}: {
+  db: DatabaseRow;
+  studio: MongoStudioT | null;
+  busy: string | null;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  const [reveal, setReveal] = useState(false);
+  const [copied, setCopied] = useState<"user" | "pass" | null>(null);
+  const running = Boolean(studio?.running);
+  const installed = Boolean(studio?.installed);
+
+  async function copy(label: "user" | "pass", value: string | null) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1400);
+    } catch {
+      /* clipboard permission denied — the value is still visible */
+    }
+  }
+
+  return (
+    <GlassPanel accent="cyan" className="space-y-3 p-5" interactive={false}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-sky-400">
+            <Braces size={16} />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <StatusDot ok={running} />
+              <h3 className="text-sm font-semibold text-white">{db.name}</h3>
+              <Badge tone="info">MongoDB {db.version}</Badge>
+            </div>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              internal <Code>{`db-${db.name}`}</Code> · port {db.port}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {running && studio?.url ? (
+            <>
+              <Button
+                size="sm"
+                onClick={() => window.open(studio.url as string, "_blank", "noopener,noreferrer")}
+              >
+                <ExternalLink size={13} /> Open studio
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={busy === `mongo-stop-${db.name}`}
+                onClick={onStop}
+              >
+                <Square size={13} /> Stop
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              loading={busy === `mongo-start-${db.name}`}
+              onClick={onStart}
+            >
+              <Play size={13} /> {installed ? "Start studio" : "Install studio"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {studio?.error && (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          {studio.error}
+        </p>
+      )}
+
+      {studio?.username && studio?.password ? (
+        <div className="space-y-1.5 rounded-xl border border-border/60 bg-black/20 p-3 font-mono text-[11px] text-slate-300">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">user</span>
+            <Code>{studio.username}</Code>
+            <button
+              type="button"
+              className="ml-auto text-slate-500 hover:text-white"
+              onClick={() => void copy("user", studio.username)}
+              aria-label="Copy studio username"
+            >
+              {copied === "user" ? <Check size={12} /> : <Copy size={12} />}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">pass</span>
+            <span className="truncate text-sky-300">
+              {reveal ? studio.password : "••••••••••••••••"}
+            </span>
+            <button
+              type="button"
+              className="text-slate-500 hover:text-white"
+              onClick={() => setReveal((v) => !v)}
+              aria-label="Toggle studio password"
+            >
+              {reveal ? <EyeOff size={12} /> : <Eye size={12} />}
+            </button>
+            <button
+              type="button"
+              className="text-slate-500 hover:text-white"
+              onClick={() => void copy("pass", studio.password)}
+              aria-label="Copy studio password"
+            >
+              {copied === "pass" ? <Check size={12} /> : <Copy size={12} />}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-border/60 px-3 py-4 text-center text-[11px] text-slate-500">
+          Start the studio to generate its basic-auth credentials.
+        </p>
+      )}
+
+      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500">
+        <ShieldCheck size={13} className="mt-0.5 shrink-0 text-sky-400" />
+        mongo-express runs only while started, behind Traefik basic auth at{" "}
+        <Code>/mongo/{db.name}/</Code>. The password is stored encrypted and never appears in a URL.
+      </p>
+    </GlassPanel>
   );
 }
 
@@ -830,7 +1055,11 @@ function DbCard({
   const host = db.remote ? publicIp || "<server-ip>" : `db-${db.name}`;
 
   return (
-    <Card className="animate-fade-up space-y-3">
+    <GlassPanel
+      className="space-y-3 p-5"
+      accent={db.engine === "mongo" ? "cyan" : "blue"}
+      interactive={false}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-brand-400">
@@ -924,7 +1153,7 @@ function DbCard({
           <KeyRound size={11} /> user <Code>{db.username}</Code>
         </span>
       </div>
-    </Card>
+    </GlassPanel>
   );
 }
 
