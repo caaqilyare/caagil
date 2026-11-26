@@ -142,6 +142,11 @@ All existing screens were kept API-compatible: the light theme remaps the older
 `text-white` / `bg-white/*` / `border-white/*` / `bg-ink-*` utilities through a
 compatibility layer in `app/globals.css`, so no page had to be rewritten.
 
+> **Already updated but still see the old UI?** The panel is served from a built
+> image, so the code only changes after the image is rebuilt. Open
+> **Settings → Panel updates → Update now** (or run the manual commands below),
+> then hard-refresh the browser with **Ctrl/Cmd + Shift + R**.
+
 ## Local development
 
 ```bash
@@ -233,7 +238,10 @@ few minutes (and on demand with the refresh icon):
    by itself when the new panel answers.
 
 The running commit is baked into the image (`CAAQIL_COMMIT`) by
-`scripts/install.sh`, so a build without that metadata simply hides the badge.
+`scripts/install.sh`. Builds created before that metadata existed report
+`Version unknown`; as of v1.5.0.1 they still get an **Update now** button, and
+the rebuild writes the commit so later checks are exact. A build with no
+updater sidecar at all still needs `scripts/install.sh` re-run once.
 
 Manual update, same thing on the server:
 

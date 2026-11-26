@@ -18,6 +18,7 @@
 import { PassThrough } from "node:stream";
 import type { Readable } from "node:stream";
 import { docker } from "./docker";
+import { isUpdateAvailable } from "./update-version";
 
 const STATE_FILE = "/tmp/caaqil-update.state";
 const LOG_FILE = "/tmp/caaqil-update.log";
@@ -74,11 +75,6 @@ async function execOutput(
 
 function runningCommit(): string {
   return (process.env.CAAQIL_COMMIT || "").trim() || "unknown";
-}
-
-function sameCommit(a: string, b: string): boolean {
-  if (!a || !b || a === "unknown" || b === "unknown") return false;
-  return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
 /**
@@ -158,7 +154,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     state = "unavailable";
   }
 
-  const available = Boolean(latest && !sameCommit(current, latest));
+  const available = isUpdateAvailable(current, latest);
   return {
     current,
     latest,
@@ -168,8 +164,6 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     log,
     ...(error ? { error } : {}),
     ...(canRollback ? { canRollback, previousCommit } : {}),
-    // A build without commit metadata cannot be compared; keep the badge off.
-    ...(current === "unknown" ? { available: false } : {}),
   };
 }
 

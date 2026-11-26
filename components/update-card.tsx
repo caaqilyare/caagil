@@ -207,7 +207,9 @@ export function UpdateCard() {
               : done
                 ? "Reloading with the restored version…"
                 : available
-                  ? `main @ ${short(info.latest)} · you run ${short(info.current)}`
+                  ? unknown
+                    ? `Build metadata missing · update to install main @ ${short(info.latest)}`
+                    : `main @ ${short(info.latest)} · you run ${short(info.current)}`
                   : offline
                     ? info.error || "The updater sidecar is not reachable."
                     : unknown

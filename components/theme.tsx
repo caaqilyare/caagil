@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -25,6 +26,11 @@ type ThemeContextValue = {
 
 const STORAGE_KEY = "caaqil-theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+// Sync the stored preference before the browser paints, so the toggle icon and
+// picker never flash the wrong state after hydration. On the server it falls
+// back to useEffect (which is a no-op there).
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function systemTheme(): Resolved {
   if (typeof window === "undefined") return "dark";
@@ -45,7 +51,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Read the stored preference after hydration. The blocking script in
   // app/layout.tsx already applied the right class, so this only syncs state.
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     let stored: string | null = null;
     try {
       stored = localStorage.getItem(STORAGE_KEY);
