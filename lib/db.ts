@@ -307,6 +307,13 @@ export async function query<T = RowDataPacket[]>(
   return rows as T;
 }
 
+export async function all<T = RowDataPacket>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  return query<T[]>(sql, params);
+}
+
 export async function one<T = RowDataPacket>(
   sql: string,
   params: unknown[] = [],

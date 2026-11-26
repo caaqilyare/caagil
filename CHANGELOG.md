@@ -3,6 +3,12 @@
 This file is read by the updater. The panel shows the newest section under
 **Settings → Panel updates → What's new** before you install an update.
 
+## 1.6.0.7 — Add missing `all` query helper to the database module
+
+- Exported the `all()` helper from `lib/db.ts` so the AI Operator memory and
+  chat history code (`lib/ai.ts`, `/api/chat/history`) can list rows again.
+  This restores the AI memory/history features and fixes the TypeScript build.
+
 ## 1.6.0.6 — Fix missing `cn` import in Databases page
 
 - Imported `cn` from `@/components/ui` in `app/(panel)/databases/page.tsx` to
