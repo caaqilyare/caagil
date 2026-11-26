@@ -3,6 +3,11 @@
 This file is read by the updater. The panel shows the newest section under
 **Settings → Panel updates → What's new** before you install an update.
 
+## 1.6.0.6 — Fix missing `cn` import in Databases page
+
+- Imported `cn` from `@/components/ui` in `app/(panel)/databases/page.tsx` to
+  fix the Next.js TypeScript build error.
+
 ## 1.6.0.5 — Unified Glassmorphism & Glow UI across all pages
 
 - **Unified sapphire-cyan glassmorphism** — harmonized `brand` and `ink` tokens

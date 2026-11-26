@@ -37,6 +37,7 @@ import {
   Modal,
   Select,
   StatusDot,
+  cn,
 } from "@/components/ui";
 import { usePanel } from "@/lib/client";
 import { GlassPanel, GlowItem, GlowList } from "@/components/glow";
