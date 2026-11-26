@@ -3,6 +3,16 @@
 This file is read by the updater. The panel shows the newest section under
 **Settings → Panel updates → What's new** before you install an update.
 
+## 1.6.0.5 — Unified Glassmorphism & Glow UI across all pages
+
+- **Unified sapphire-cyan glassmorphism** — harmonized `brand` and `ink` tokens
+  in `tailwind.config.ts` with `globals.css` so every page (Overview, Apps,
+  Databases, Domains, Cron, Backups, Logs, AI Operator, Settings, Login) shares
+  matching text colors, borders, and frosted glass surfaces.
+- **True frosted glass + soft glow** — upgraded `.card`, `.glass`, `.glass-card`,
+  `.glass-panel`, buttons, inputs, sidebar, and login card with `backdrop-blur-2xl`,
+  specular top highlights, and subtle ambient glow in both light and dark modes.
+
 ## 1.6.0.4 — phpMyAdmin fix, MongoDB Studio redesign, AI Memory/History/App Editor & Custom AI API
 
 - **phpMyAdmin fixed** — `internalSecret()` now decrypts the stored secret instead

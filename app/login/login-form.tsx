@@ -58,10 +58,10 @@ export function LoginForm() {
         <ThemeToggle />
       </header>
 
-      {/* Centered AdminUX login card */}
+      {/* Centered Glassmorphism + Glow login card */}
       <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-8">
         <div className="animate-fade-up w-full max-w-[426px]">
-          <div className="rounded-[1.5rem] bg-card p-7 text-card-foreground shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-8">
+          <div className="rounded-[1.5rem] border border-white/25 bg-card/80 p-7 text-card-foreground shadow-[0_24px_80px_-12px_rgba(0,73,232,0.55),inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-2xl dark:border-white/15 dark:bg-card/70 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold tracking-tight text-primary">Login</h2>
               <p className="mt-1 text-sm text-muted-foreground">

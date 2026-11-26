@@ -135,7 +135,7 @@ function NavList({
                   {active && (
                     <motion.span
                       layoutId={layoutId}
-                      className="absolute inset-0 rounded-[var(--radius)] bg-primary shadow-sm"
+                      className="absolute inset-0 rounded-[var(--radius)] bg-primary shadow-[0_6px_22px_-6px_hsl(var(--glow)/0.65)]"
                       transition={{ type: "spring", stiffness: 420, damping: 34 }}
                     />
                   )}
@@ -296,8 +296,8 @@ export function Shell({
       <AuroraBackground />
 
       <div className="flex min-h-screen">
-        {/* Desktop sidebar (AdminUX 280px frosted glass) */}
-        <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 flex-col bg-white/55 shadow-sm backdrop-blur-[15px] dark:bg-card/65 lg:flex">
+        {/* Desktop sidebar (frosted glassmorphism + soft glow) */}
+        <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 flex-col border-r border-border/50 bg-card/55 shadow-[0_0_40px_-20px_hsl(var(--glow)/0.3)] backdrop-blur-2xl lg:flex">
           <div className="flex h-[68px] items-center px-5">
             <Brand panelName={panelName} />
           </div>

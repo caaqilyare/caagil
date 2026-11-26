@@ -50,19 +50,19 @@ const config: Config = {
           DEFAULT: "hsl(var(--surface) / <alpha-value>)",
           2: "hsl(var(--surface-2) / <alpha-value>)",
         },
-        /* legacy palette kept so existing pages keep working */
+        /* sapphire-cyan glass palette */
         ink: {
-          950: "#070b10",
-          900: "#0b1118",
-          850: "#0f1620",
-          800: "#141c28",
-          700: "#1d2735",
-          600: "#2a3547",
+          950: "#050914",
+          900: "#081024",
+          850: "#0c1631",
+          800: "#111e40",
+          700: "#182852",
+          600: "#24376b",
         },
         brand: {
-          400: "#34e0a1",
-          500: "#12c98a",
-          600: "#0aa873",
+          400: "#60a5fa",
+          500: "#2563eb",
+          600: "#1d4ed8",
         },
       },
       fontFamily: {

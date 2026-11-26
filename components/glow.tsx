@@ -18,10 +18,10 @@ export function AuroraBackground({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="aurora aurora-blue absolute -top-56 left-[-10%] h-[600px] w-[600px] rounded-full blur-3xl" />
-      <div className="aurora aurora-cyan absolute right-[-12%] top-1/4 h-[520px] w-[520px] rounded-full blur-3xl" />
-      <div className="aurora aurora-white absolute -bottom-56 left-1/3 h-[560px] w-[560px] rounded-full blur-3xl" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(221_100%_45%/0.06),transparent_62%)]" />
+      <div className="aurora aurora-blue absolute -top-56 left-[-10%] h-[680px] w-[680px] rounded-full blur-[120px]" />
+      <div className="aurora aurora-cyan absolute right-[-12%] top-1/4 h-[580px] w-[580px] rounded-full blur-[120px]" />
+      <div className="aurora aurora-white absolute -bottom-56 left-1/3 h-[620px] w-[620px] rounded-full blur-[130px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(221_100%_55%/0.10),transparent_60%)]" />
     </div>
   );
 }

@@ -19,23 +19,23 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-[#0049e8] text-white shadow-[0_8px_24px_-10px_rgba(0,73,232,0.55)] hover:bg-[#003fc7] active:bg-[#0037ad]",
+          "bg-primary text-primary-foreground shadow-[0_0_24px_-4px_hsl(var(--glow)/0.6)] hover:bg-primary/90 hover:shadow-[0_0_32px_-2px_hsl(var(--glow)/0.78)]",
         accent:
-          "bg-[#03045e] text-white shadow-sm hover:bg-[#01024b] active:bg-[#010235]",
+          "bg-[#03045e] text-white shadow-[0_0_20px_-6px_rgba(3,4,94,0.65)] hover:bg-[#01024b]",
         secondary:
-          "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "border border-border/80 bg-card/70 text-foreground backdrop-blur-md hover:bg-card/95",
         ghost:
           "bg-transparent text-muted-foreground hover:bg-primary/10 hover:text-primary",
         subtle:
-          "bg-primary/12 text-primary hover:bg-primary/20",
+          "border border-primary/20 bg-primary/12 text-primary backdrop-blur-md hover:bg-primary/20",
         danger:
-          "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20",
+          "border border-destructive/30 bg-destructive/12 text-destructive backdrop-blur-md hover:bg-destructive/20",
         success:
-          "bg-[#6faa00] text-white shadow-sm hover:bg-[#5e9100]",
+          "bg-[#6faa00] text-white shadow-[0_0_20px_-6px_rgba(111,170,0,0.6)] hover:bg-[#5e9100]",
         outline:
-          "border border-primary/75 bg-transparent text-primary hover:bg-primary/85 hover:text-white",
+          "border border-primary/60 bg-card/40 text-primary backdrop-blur-md hover:bg-primary hover:text-primary-foreground",
         dashed:
-          "border border-dashed border-primary/70 bg-transparent text-primary hover:bg-primary/10",
+          "border border-dashed border-primary/60 bg-transparent text-primary hover:bg-primary/10",
       },
       size: {
         sm: "h-8 rounded-lg px-3 text-xs",
@@ -79,7 +79,7 @@ export function Button({
 /* ────────────────────────────── inputs ──────────────────────────── */
 
 const fieldBase =
-  "w-full rounded-xl border border-input bg-background/60 px-3 text-sm text-foreground placeholder:text-muted-foreground/70 outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full rounded-[var(--radius)] border border-border/80 bg-card/65 px-3 text-sm text-foreground placeholder:text-muted-foreground/70 backdrop-blur-md outline-none transition focus:border-primary/70 focus:ring-2 focus:ring-primary/20 focus:shadow-[0_0_18px_-6px_hsl(var(--glow)/0.45)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(fieldBase, "h-10", props.className)} />;
